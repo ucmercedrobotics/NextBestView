@@ -11,6 +11,11 @@
 <!-- [![arXiv](https://img.shields.io/badge/arXiv-2409.04653-b31b1b.svg)](https://arxiv.org/abs/2409.04653) -->
 
 ## How to Start
+Make sure you initialize the repo with the repo pre-commits:
+```bash
+make repo-init
+```
+
 To start, make your local Docker network to connect your VNC client, local machine, and Amiga together. You'll use this later when remote controlling the Amiga.
 ```bash
 make network
