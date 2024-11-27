@@ -7,10 +7,11 @@ ARG GID
 # any utilities you want
 RUN apt-get update && apt-get install -y git wget python3-pip vim net-tools netcat
 
+# TODO: add CUDA capabilities for when we wish to add GPU queries
+
 WORKDIR /nbv
 
-COPY . /nbv/
-COPY requirements.txt /amiga_ros2_bridge/requirements.txt
+COPY requirements.txt /nbv/requirements.txt
 
 RUN pip install -r requirements.txt
 
@@ -18,10 +19,10 @@ RUN pip install -r requirements.txt
 ENV DISPLAY=novnc:0.0
 
 # # # build artifacts to run by default
-# RUN /bin/bash -c "cd /amiga_ros2_bridge && \
+# RUN /bin/bash -c "cd /nbv/nbv && \
 #                     colcon build"
 
-RUN adduser -u ${UID} --disabled-password --gecos "" appuser && chown -R appuser /amiga_ros2_bridge
+RUN adduser -u ${UID} --disabled-password --gecos "" appuser && chown -R appuser /nbv
 USER appuser
 
-# RUN echo "source /amiga_ros2_bridge/install/setup.bash" >> /home/appuser/.bashrc
+RUN echo "source /nbv/install/setup.bash" >> /home/appuser/.bashrc
