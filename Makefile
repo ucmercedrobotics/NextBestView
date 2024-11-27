@@ -1,3 +1,7 @@
+repo-init:
+	python3 -m pip install pre-commit && \
+	pre-commit install
+
 network:
 	docker network create nbv
 
@@ -22,5 +26,5 @@ bash:
 	-v ~/.ssh:/home/appuser/.ssh:ro \
 	nbv bash
 
-clean: 
+clean:
 	rm -rf build/ install/ log/
