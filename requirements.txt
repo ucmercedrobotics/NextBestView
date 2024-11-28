@@ -2,3 +2,7 @@ opencv-python==4.10.0.84
 ultralytics==8.3.38
 webcolors==24.11.1
 pre-commit==3.4.0
+# ROS2 required
+catkin_pkg==1.0.0
+empy==3.3.4
+lark==1.2.2

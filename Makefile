@@ -6,7 +6,7 @@ network:
 	docker network create nbv
 
 build-image:
-	docker build --build-arg UID=$(shell id -u) --build-arg GID=$(shell id -g) . -t nbv --target base
+	docker build . -t nbv --target base
 
 vnc:
 	docker run -d --rm \
@@ -21,9 +21,8 @@ vnc:
 bash:
 	docker run -it --rm \
 	--net=nbv \
-	--user $(shell id -u):$(shell id -g) \
+	--privileged \
 	-v ./Makefile:/nbv/Makefile:Z \
-	-v ~/.ssh:/home/appuser/.ssh:ro \
 	nbv bash
 
 clean:
