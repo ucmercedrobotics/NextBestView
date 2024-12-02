@@ -32,8 +32,9 @@ sim-run:
 	ros2 launch kortex_bringup gen3.launch.py \
 	robot_ip:=yyy.yyy.yyy.yyy \
 	use_fake_hardware:=true \
-	vision:=true \
-	dof:=6
+	dof:=6 \
+	gripper:=robotiq_2f_85 \
+
 
 config-target-network:
 	sudo ifconfig ${KINOVA_NIC} 192.168.1.11 netmask 255.255.255.0
