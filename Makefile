@@ -1,3 +1,4 @@
+WORKSPACE:= /nbv
 KINOVA_NIC:= en7
 
 repo-init:
@@ -7,14 +8,17 @@ repo-init:
 network:
 	docker network create nbv
 
+config-target-network:
+	sudo ifconfig ${KINOVA_NIC} 192.168.1.11 netmask 255.255.255.0
+
 build-image:
 	docker build . -t nbv --target base
 
 vnc:
 	docker run -d --rm \
 	--net=nbv \
-	--env="DISPLAY_WIDTH=2000" \
-	--env="DISPLAY_HEIGHT=1800" \
+	--env="DISPLAY_WIDTH=1920" \
+	--env="DISPLAY_HEIGHT=1080" \
 	--env="RUN_XTERM=no" \
 	--name=novnc \
 	-p=8080:8080 \
@@ -24,27 +28,26 @@ sim:
 	docker run -it --rm \
 	--net=nbv \
 	--privileged \
-	-v ./Makefile:/nbv/Makefile:Z \
+	-v ./:${WORKSPACE}/ \
 	nbv bash
-
-# TODO: replace with moveit to include bracelet?
-sim-run:
-	ros2 launch kortex_bringup gen3.launch.py \
-	robot_ip:=yyy.yyy.yyy.yyy \
-	use_fake_hardware:=true \
-	dof:=6 \
-	gripper:=robotiq_2f_85 \
-
-
-config-target-network:
-	sudo ifconfig ${KINOVA_NIC} 192.168.1.11 netmask 255.255.255.0
 
 target:
 	docker run -it --rm \
 	--net=host \
 	--privileged \
-	-v ./Makefile:/nbv/Makefile:Z \
+	-v ./:${WORKSPACE}/ \
 	nbv bash
+
+# TODO: replace with moveit to include bracelet?
+sim-run:
+	ros2 launch next_best_view vision.launch.py \
+	use_sim_time:=true \
+	launch_rviz:=true \
+	robot_ip:=yyy.yyy.yyy.yyy \
+	use_fake_hardware:=true \
+	dof:=6 \
+	gripper:=robotiq_2f_85 \
+	vision:=true
 
 target-run:
 	ros2 launch kortex_bringup gen3.launch.py \
@@ -52,6 +55,9 @@ target-run:
 	dof:=6 \
 	vision:=true \
 	launch_rviz:=false
+
+nbv:
+	colcon build
 
 clean:
 	rm -rf build/ install/ log/
