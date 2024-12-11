@@ -60,7 +60,12 @@ To start the Docker environment for target only:
 make target
 ```
 
-Finally, to launch the ROS2 drivers for Kortex control:
+Finally, to launch the ROS2 drivers for MoveIt Kortex control:
 ```bash
-make target-run
+make moveit-target
+```
+
+If you want to see the robot move, you can launch the custom example node we prebuilt:
+```bash
+make ros-target-example
 ```

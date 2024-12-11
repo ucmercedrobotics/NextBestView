@@ -56,12 +56,15 @@ moveit:
 	use_fake_hardware:=true \
 	vision:=true
 
-target-run:
-	ros2 launch kortex_bringup gen3.launch.py \
+moveit-target:
+	ros2 launch next_best_view moveit.launch.py \
 	robot_ip:=192.168.1.10 \
-	dof:=6 \
-	vision:=true \
-	launch_rviz:=false
+	use_fake_hardware:=false \
+	launch_rviz:=false \
+	vision:=true
+
+ros-target-example:
+	ros2 run next_best_view next_best_view
 
 nbv:
 	colcon build
