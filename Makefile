@@ -38,15 +38,22 @@ target:
 	-v ./:${WORKSPACE}/ \
 	nbv bash
 
-# TODO: replace with moveit to include bracelet?
-sim-run:
-	ros2 launch next_best_view vision.launch.py \
+gazebo:
+	ros2 launch kortex_bringup kortex_sim_control.launch.py \
 	use_sim_time:=true \
-	launch_rviz:=true \
+	launch_rviz:=false \
 	robot_ip:=yyy.yyy.yyy.yyy \
 	use_fake_hardware:=true \
 	dof:=6 \
 	gripper:=robotiq_2f_85 \
+	robot_name:=gen3 \
+	robot_controller:=joint_trajectory_controller \
+	vision:=true
+
+moveit:
+	ros2 launch next_best_view moveit.launch.py \
+	robot_ip:=yyy.yyy.yyy.yyy \
+	use_fake_hardware:=true \
 	vision:=true
 
 target-run:

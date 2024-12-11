@@ -41,9 +41,7 @@ make sim
 
 Finally, from within the container, build your ROS2 project run the sim command:
 ```bash
-make nbv
-source install/setup.bash
-make sim-run
+make moveit
 ```
 NOTE: currently this runs without the bracelet. To add this, more config must be done to the launch file to find the right model.
 
@@ -64,7 +62,5 @@ make target
 
 Finally, to launch the ROS2 drivers for Kortex control:
 ```bash
-make nbv
-source install/setup.bash
 make target-run
 ```
