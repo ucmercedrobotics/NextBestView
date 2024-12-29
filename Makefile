@@ -2,7 +2,7 @@ WORKSPACE:= /nbv
 KINOVA_NIC:= en7
 
 repo-init:
-	python3 -m pip install pre-commit && \
+	python3 -m pip install pre-commit==3.4.0 && \
 	pre-commit install
 
 network:
@@ -28,6 +28,7 @@ sim:
 	docker run -it --rm \
 	--net=nbv \
 	--privileged \
+	-p=12345:12345 \
 	-v ./:${WORKSPACE}/ \
 	nbv bash
 
@@ -65,6 +66,9 @@ moveit-target:
 
 ros-target-example:
 	ros2 run next_best_view next_best_view
+
+mission-interface:
+	ros2 run mission_interface mission_interface
 
 nbv:
 	colcon build

@@ -69,3 +69,14 @@ If you want to see the robot move, you can launch the custom example node we pre
 ```bash
 make ros-target-example
 ```
+
+## Using with Mission Planning (MP)
+Currently, control with an XML generated mission plan is under implementation.
+XML mission plans are sent via any compliant MP generation tool such as our own [GPT planner](https://github.com/ucmercedrobotics/gpt-mission-planner).
+Connect the planner to TCP port `12345` after initializing all relevant nodes.
+
+NOTE: currently there doesn't exist an action/service interface to control the Kinova arm.
+Ultimately, we will implement a node that acts as a server that the `mission_interface` node communicates actions to, along with a launch file.
+
+Right now you can experiment with the behavior tree mission plan generation with `make mission-interface` and sending a mission plan over port `12345`.
+See an example [here](https://github.com/ucmercedrobotics/gpt-mission-planner/blob/main/app/gpt_outputs/gpt_example.xml)
