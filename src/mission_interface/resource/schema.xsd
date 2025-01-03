@@ -71,6 +71,10 @@
             <xs:element name="x" type="xs:decimal"/>
             <xs:element name="y" type="xs:decimal"/>
             <xs:element name="z" type="xs:decimal"/>
+            <!-- the 3 below are in radians -->
+            <xs:element name="roll" type="xs:decimal"/>
+            <xs:element name="pitch" type="xs:decimal"/>
+            <xs:element name="yaw" type="xs:decimal"/>
         </xs:sequence>
     </xs:complexType>
 
