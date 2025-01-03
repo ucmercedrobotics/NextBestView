@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://robotics.ucmerced.edu/task"
+           xmlns="https://robotics.ucmerced.edu/task"
+           elementFormDefault="qualified">
+
+    <!-- Root element for the task -->
+    <xs:element name="TaskTemplate">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="CompositeTaskInformation" type="CompositeTaskInformationType"/>
+                <!-- I don't think these are needed in the global task definition -->
+                <!-- <xs:element name="StateVariables" type="StateVariablesType"/>
+                <xs:element name="Parameters" type="ParametersType"/> -->
+                <xs:element name="Preconditions" type="PreconditionsType"/>
+                <xs:element name="AtomicTasks" type="AtomicTasksType"/>
+                <xs:element name="ActionSequence" type="ActionSequenceType"/>
+                <xs:element name="Outcome" type="OutcomeType"/>
+                <xs:element name="Exits" type="ExitsType"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- Simple type for Manipulator Actions -->
+    <xs:simpleType name="manipulatorActionTypes">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="pickObject"/>
+            <xs:enumeration value="placeObject"/>
+            <xs:enumeration value="identifyObject"/>
+            <xs:enumeration value="nextBestView"/>
+            <xs:enumeration value="goToLocation"/>
+            <!-- TODO: I think there needs to be something here a bit higher level to identify object? -->
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Complex type for pickObject -->
+    <xs:complexType name="pickObjectType">
+        <xs:sequence>
+            <xs:element name="gripForce" type="xs:decimal" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Complex type for placeObject -->
+    <xs:complexType name="placeObjectType">
+        <xs:sequence>
+            <xs:element name="releaseForce" type="xs:decimal" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Complex type for object segmentation -->
+    <xs:complexType name="identifyObjectType">
+        <xs:sequence>
+            <!-- object characteristics -->
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="color" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Complex type for nextBestView -->
+    <xs:complexType name="nextBestViewType">
+        <xs:sequence>
+            <!-- quality of digital twin on a scale from 1-10 -->
+            <xs:element name="resolution" type="xs:integer"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Complex type for moving to a relative location -->
+    <xs:complexType name="goToLocationType">
+        <xs:sequence>
+            <!-- meters in all directions -->
+            <xs:element name="x" type="xs:decimal"/>
+            <xs:element name="y" type="xs:decimal"/>
+            <xs:element name="z" type="xs:decimal"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Complex type for manipulatorActions -->
+    <xs:complexType name="manipulatorActions">
+        <xs:sequence>
+            <xs:element name="ActionType" type="manipulatorActionTypes"/>
+            <xs:choice>
+                <xs:element name="pickObject" type="pickObjectType"/>
+                <xs:element name="placeObject" type="placeObjectType"/>
+                <xs:element name="identifyObject" type="identifyObjectType"/>
+                <xs:element name="nextBestView" type="nextBestViewType"/>
+                <xs:element name="goToLocation" type="goToLocationType"/>
+            </xs:choice>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Complex type for Composite Task Information -->
+    <xs:complexType name="CompositeTaskInformationType">
+        <xs:sequence>
+            <xs:element name="TaskID" type="xs:string"/>
+            <xs:element name="TaskDescription" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Complex type for State Variables -->
+    <xs:complexType name="StateVariablesType">
+        <xs:sequence>
+            <xs:element name="StateVariable" minOccurs="0" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="VariableName" type="xs:string"/>
+                        <xs:element name="VariableValue" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Complex type for State Variables -->
+    <xs:complexType name="ParametersType">
+        <xs:sequence>
+            <xs:element name="Parameter" minOccurs="0" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="VariableName" type="xs:string"/>
+                        <xs:element name="VariableValue" type="xs:string"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Simple type for Condition Types -->
+    <xs:simpleType name="stateTypes">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="atOrigin"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Complex type for Preconditions -->
+    <xs:complexType name="PreconditionsType">
+        <xs:sequence>
+            <xs:element name="Precondition" minOccurs="0" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Condition" type="stateTypes"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+
+    <!-- Complex type for Atomic Tasks -->
+    <xs:complexType name="AtomicTasksType">
+        <xs:sequence>
+            <xs:element name="AtomicTask" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="TaskID" type="xs:string"/>
+                        <xs:element name="TaskDescription" type="xs:string"/>
+                        <xs:element name="StateVariables" type="StateVariablesType" minOccurs="0"/>
+                        <xs:element name="Action" type="manipulatorActions" minOccurs="0" maxOccurs="1"/>
+                        <xs:element name="Parameters" type="ParametersType"/>
+                        <xs:element name="Preconditions" type="PreconditionsType" minOccurs="0"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Conditional type -->
+     <!-- TODO: update this to incorporate the precondition type, maybe, or add a new type for conditionals -->
+    <xs:complexType name="ConditionalType">
+        <xs:sequence>
+            <xs:element name="ConditionalExpression" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- ConditionalAction type -->
+    <xs:complexType name="ConditionalActionsType">
+        <xs:sequence>
+            <xs:element name="Conditional" type="ConditionalType" minOccurs="0" maxOccurs="1"/>
+            <xs:element name="Sequence" type="ConditionalSequenceType" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Full sequence of actions + conditional complexType for behavior tree -->
+    <xs:complexType name="ConditionalSequenceType">
+        <xs:sequence>
+            <xs:choice maxOccurs="unbounded">
+                <xs:element name="TaskID" type="xs:string"/>
+                <xs:element name="ConditionalActions" type="ConditionalActionsType"/>
+            </xs:choice>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Ensuring ConditionalAction must be preceded by a TaskID -->
+    <xs:complexType name="SequenceType">
+        <xs:sequence>
+            <xs:element name="TaskID" type="xs:string" maxOccurs="unbounded"/>
+            <xs:element name="ConditionalActions" type="ConditionalActionsType" maxOccurs="unbounded" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ActionSequenceType">
+        <xs:sequence>
+            <xs:element name="Sequence" type="SequenceType" minOccurs="1" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- TODO: unused for now are the below complexTypes. -->
+
+    <!-- Complex type for Outcome -->
+    <xs:complexType name="OutcomeType">
+        <xs:sequence>
+            <xs:element name="State" type="stateTypes" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Simple type for exit types -->
+    <xs:simpleType name="exitTypes">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="nominal"/>
+            <xs:enumeration value="faulted"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Complex type for Exits -->
+    <xs:complexType name="ExitsType">
+        <xs:sequence>
+            <xs:element name="Exit" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="Type" type="exitTypes"/>
+                        <!-- Something else to describe exit case -->
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- TODO: really unused for now are the above complexTypes. -->
+
+</xs:schema>

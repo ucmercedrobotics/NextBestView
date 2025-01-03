@@ -41,6 +41,7 @@ RUN cd $COLCON_WS && \
 # build artifacts to run by default
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     cd $COLCON_WS && \
+    apt update && \
     rosdep install --ignore-src --from-paths src -y -r && \
     colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release --parallel-workers 3
 
