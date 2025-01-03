@@ -33,13 +33,8 @@ class ActionType(str, Enum):
     RELEASEOBJECT = "releaseObject"
     IDENTIFYOBJECT = "identifyObject"
     NEXTBESTVIEW = "nextBestView"
-    # TODO: could be that this is implied in prior action
-    STOREPOINTCLOUD = "storePointCloud"
-    # TODO: remove
-    MOVETOLOCATION = "moveToLocation"
-    TAKETHERMALPICTURE = "takeThermalPicture"
-    TAKECO2READING = "takeCO2Reading"
-    TAKEAMBIENTTEMPERATURE = "takeAmbientTemperature"
+    # debugging movement of arm
+    GOTOLOCATION = "goToLocation"
 
 
 class ParameterTypes(str, Enum):
