@@ -21,8 +21,7 @@ After, build your container:
 make build-image
 ```
 
-### Simulation
-If you're running in simulation, you'll be forwarding graphic display to noVNC using your browser.
+You'll be forwarding graphic display to noVNC using your browser.
 First start the Docker network that will manage these packets:
 To start, make your local Docker network to connect your VNC client, local machine, and Kinova together. You'll use this later when remote controlling the Kinova.
 ```bash
@@ -34,9 +33,10 @@ Next, standup the VNC container to forward X11 to your web browser. You can see 
 make vnc
 ```
 
+### Simulation
 Then run the sim container:
 ```bash
-make sim
+make bash
 ```
 
 Finally, from within the container, build your ROS2 project run the sim command:
@@ -46,18 +46,19 @@ make moveit
 NOTE: currently this runs without the bracelet. To add this, more config must be done to the launch file to find the right model.
 
 ### Target
-For some reason, I can't figure out how to connect the host network into a Docker network to have connection from Kinova working with X11 forwarding all in one.
-So to get around it, we have one run command for connecting directly (this will run without Rviz) to the target as if you're running only with ROS2 and the one above running only in simulation with Rviz.
-Until we get around it, this is how it will be.
-
 Make sure you're on the same subnet as the Kinova and plugged in via ethernet. Then run the NIC setup command:
 ```bash
 make config-target-network
 ```
-
-To start the Docker environment for target only:
+By default, the name of the NIC is `en7`. Change this to whatever your NIC is that connects to the Kinova with the `Make` argument `KINOVA_NIC`.
+Example:
 ```bash
-make target
+make config-target-network KINOVA_NIC=<your_nic_name>
+```
+
+To start the Docker environment:
+```bash
+make bash
 ```
 
 Finally, to launch the ROS2 drivers for MoveIt Kortex control:
@@ -69,6 +70,14 @@ If you want to see the robot move, you can launch the custom example node we pre
 ```bash
 make ros-target-example
 ```
+
+### Vision
+If you intend on using the vision module, run an additional vision module by opening up another shell in Docker using `docker exec`.
+From there, run the following command:
+```bash
+make vision
+```
+This will bring up the vision ROS2 node that exposes the RGBD camera on ROS2 topics and can be visualized in RViz.
 
 ## Using with Mission Planning (MP)
 Currently, control with an XML generated mission plan is under implementation.

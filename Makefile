@@ -24,18 +24,11 @@ vnc:
 	-p=8080:8080 \
 	theasp/novnc:latest
 
-sim:
+bash:
 	docker run -it --rm \
 	--net=nbv \
 	--privileged \
 	-p=12345:12345 \
-	-v ./:${WORKSPACE}/ \
-	nbv bash
-
-target:
-	docker run -it --rm \
-	--net=host \
-	--privileged \
 	-v ./:${WORKSPACE}/ \
 	nbv bash
 
@@ -61,8 +54,11 @@ moveit-target:
 	ros2 launch next_best_view moveit.launch.py \
 	robot_ip:=192.168.1.10 \
 	use_fake_hardware:=false \
-	launch_rviz:=false \
+	launch_rviz:=true \
 	vision:=true
+
+vision:
+	ros2 launch kinova_vision kinova_vision.launch.py depth_registration:=true
 
 ros-target-example:
 	ros2 run next_best_view next_best_view
