@@ -60,8 +60,8 @@ moveit-target:
 vision:
 	ros2 launch kinova_vision kinova_vision.launch.py depth_registration:=true
 
-ros-target-example:
-	ros2 run next_best_view next_best_view
+moveit-example:
+	ros2 run example_nbv example_nbv
 
 mission-interface:
 	ros2 run mission_interface mission_interface
