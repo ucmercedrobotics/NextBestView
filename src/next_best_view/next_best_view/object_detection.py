@@ -39,9 +39,9 @@ class ObjectDetectionNode(Node):
         self.latest_frames = None
         self.frames_lock = Lock()
 
-        self._color_sub = Subscriber(self, Image, "/color/image")
-        self._depth_sub = Subscriber(self, Image, "/stereo/depth")
-        self._info_sub = Subscriber(self, CameraInfo, "/stereo/camera_info")
+        self._color_sub = Subscriber(self, Image, "/camera/color/image_raw")
+        self._depth_sub = Subscriber(self, Image, "/camera/depth/image_raw")
+        self._info_sub = Subscriber(self, CameraInfo, "/camera/depth/camera_info")
         self._time_sync = ApproximateTimeSynchronizer(
             [
                 self._color_sub,
@@ -132,7 +132,7 @@ class ObjectDetectionNode(Node):
                 best_detection = detections[0]
 
                 # Calculate 3D position
-                # Note: Adjust these values based on your camera calibration
+                # TODO: figure out what we have and adjust these
                 fx = 525.0  # focal length x
                 fy = 525.0  # focal length y
                 cx = 319.5  # optical center x
@@ -168,8 +168,6 @@ class ObjectDetectionNode(Node):
                 annotated_image = self._draw_detections(
                     frames["rgb"].copy(), detections, target_class
                 )
-
-                cv2.imshow("image_with_object", annotated_image)
 
         except Exception as e:
             self.get_logger().error(f"Detection failed: {str(e)}")
@@ -208,6 +206,8 @@ class ObjectDetectionNode(Node):
             cv2.circle(
                 image_with_boxes, (int(center_x), int(center_y)), 4, (255, 0, 0), -1
             )
+
+            cv2.imshow("image_with_object", image_with_boxes)
 
         return image_with_boxes
 
