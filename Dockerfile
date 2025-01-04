@@ -11,24 +11,27 @@ COPY --from=builder /usr/local /usr/local
 
 # any utilities you want
 RUN apt-get update && apt-get install -y git wget python3-pip vim net-tools netcat \
-    python3-colcon-common-extensions python3-vcstool
+    python3-colcon-common-extensions python3-vcstool \
+    gstreamer1.0-tools gstreamer1.0-libav libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev libgstreamer-plugins-good1.0-dev gstreamer1.0-plugins-good gstreamer1.0-plugins-base
 
 # config for cyclone -> needed for moveit
 RUN apt update && apt install ros-humble-rmw-cyclonedds-cpp -y
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-
-# set root directory
-WORKDIR /nbv
-
-ENV COLCON_WS=/root/workspace/ros2_kortex_ws
-RUN mkdir -p ${COLCON_WS}/src
 
 # TODO: add CUDA capabilities for when we wish to add GPU queries
 
 # configure DISPLAY env variable for novnc connection
 ENV DISPLAY=novnc:0.0
 
-RUN cd $COLCON_WS && \
+# set root directory
+WORKDIR /nbv
+
+# BEGIN kortex ros2 module compilation
+ENV KORTEX_WS=/root/workspace/ros2_kortex_ws
+RUN mkdir -p ${KORTEX_WS}/src
+
+RUN cd $KORTEX_WS && \
     git clone https://github.com/Kinovarobotics/ros2_kortex.git src/ros2_kortex && \
     vcs import src --skip-existing --input src/ros2_kortex/ros2_kortex.$ROS_DISTRO.repos && \
     vcs import src --skip-existing --input src/ros2_kortex/ros2_kortex-not-released.$ROS_DISTRO.repos && \
@@ -40,10 +43,21 @@ RUN cd $COLCON_WS && \
 
 # build artifacts to run by default
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
-    cd $COLCON_WS && \
+    cd $KORTEX_WS && \
     apt update && \
     rosdep install --ignore-src --from-paths src -y -r && \
     colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release --parallel-workers 3
+# END kortex ros2 module compilation
+
+# BEGIN vision module compilation
+ENV VISION_WS=/root/workspace/vision_ws
+RUN mkdir -p ${VISION_WS}/src
+
+RUN cd $VISION_WS && git clone https://github.com/Kinovarobotics/ros2_kortex_vision.git && \
+    . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    rosdep install --from-paths . --ignore-src -r -y && \
+    colcon build
+# END vision module end
 
 # build local project
 COPY . /nbv
@@ -51,5 +65,6 @@ RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build
 
 # source packages
-RUN echo "source ${COLCON_WS}/install/setup.bash" >> /root/.bashrc
+RUN echo "source ${KORTEX_WS}/install/setup.bash" >> /root/.bashrc
+RUN echo "source ${VISION_WS}/install/setup.bash" >> /root/.bashrc
 RUN echo "source /nbv/install/setup.bash" >> /root/.bashrc
