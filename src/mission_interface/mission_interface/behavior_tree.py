@@ -2,7 +2,7 @@ import logging
 
 from lxml import etree
 
-from .tasking import TaskLeaf, ElementTags, Conditional
+from .tasking import TaskLeaf, ElementTags, Conditional, TASK_CONSTRUCTORS
 
 TRUE_BRANCH_IDX: int = 0
 FALSE_BRANCH_IDX: int = 1
@@ -55,6 +55,7 @@ class BehaviorTree:
             if t.tag == self.namespace + ElementTags.TASKID:
                 # names of tasks to identify with atomic descriptions
                 task: TaskLeaf = self._create_leaf(parent, t.text, depth)
+                self.logger.debug(task.__repr__())
             # this represents the second branch of behavior as first is covered in nested conditional above ^
             elif t.tag == self.namespace + ElementTags.CONDITIONALACTIONS:
                 cond: etree._Element = t.find(self.namespace + ElementTags.CONDITONAL)
@@ -107,13 +108,17 @@ class BehaviorTree:
         #   <Action>
         #       <ActionType>we want this string</ActionType>
         #       ...
-        action_type: str = (
-            task.find(self.namespace + ElementTags.ACTION)
-            .find(self.namespace + ElementTags.ACTIONTYPE)
-            .text
-        )
+        action_type: etree._Element = task.find(
+            self.namespace + ElementTags.ACTION
+        ).find(self.namespace + ElementTags.ACTIONTYPE)
 
-        t: TaskLeaf = TaskLeaf(name, action_type, depth)
+        # to make this generic, the action will always be after the action type
+        action: etree._Element = action_type.getnext()
+
+        # find from the dictionary which constructor to use
+        t = TASK_CONSTRUCTORS[action_type.text](
+            name, action_type.text, depth, self.namespace, action
+        )
         # NOTE: this is the root task of the behavior tree
         if parent is None:
             self.task_root = t
