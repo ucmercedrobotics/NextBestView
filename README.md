@@ -68,7 +68,7 @@ make moveit-target
 
 If you want to see the robot move, you can launch the custom example node we prebuilt:
 ```bash
-make ros-target-example
+make moveit-example
 ```
 
 ### Vision

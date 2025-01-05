@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(next_best_view)
+project(example_nbv)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -31,27 +31,19 @@ foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
   find_package(${Dependency} REQUIRED)
 endforeach()
 
-ament_python_install_package(next_best_view)
-
 include_directories(${THIS_PACKAGE_INCLUDE_DIRS})
 
-# Install launch files.
-install(DIRECTORY
-  launch
-  DESTINATION share/${PROJECT_NAME}/
-)
-
-add_executable(next_best_view src/hello_moveit.cpp)
-target_include_directories(next_best_view PUBLIC
+add_executable(example_nbv src/hello_moveit.cpp)
+target_include_directories(example_nbv PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-ament_target_dependencies(next_best_view
+ament_target_dependencies(example_nbv
   "rclcpp"
   ${THIS_PACKAGE_INCLUDE_DEPENDS}
   )
-target_compile_features(next_best_view PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(example_nbv PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
-install(TARGETS next_best_view
+install(TARGETS example_nbv
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

@@ -32,6 +32,12 @@ bash:
 	-v ./:${WORKSPACE}/ \
 	nbv bash
 
+nbv:
+	colcon build
+
+clean:
+	rm -rf build/ install/ log/
+
 gazebo:
 	ros2 launch kortex_bringup kortex_sim_control.launch.py \
 	use_sim_time:=true \
@@ -46,6 +52,7 @@ gazebo:
 
 moveit:
 	ros2 launch next_best_view moveit.launch.py \
+	use_sim_time:=true \
 	robot_ip:=yyy.yyy.yyy.yyy \
 	use_fake_hardware:=true \
 	vision:=true
@@ -60,14 +67,11 @@ moveit-target:
 vision:
 	ros2 launch kinova_vision kinova_vision.launch.py depth_registration:=true
 
-ros-target-example:
-	ros2 run next_best_view next_best_view
+moveit-example:
+	ros2 run example_nbv example_nbv
 
 mission-interface:
 	ros2 run mission_interface mission_interface
 
-nbv:
-	colcon build
-
-clean:
-	rm -rf build/ install/ log/
+detect-object:
+	ros2 run next_best_view object_detection
