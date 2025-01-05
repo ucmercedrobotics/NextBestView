@@ -32,6 +32,12 @@ bash:
 	-v ./:${WORKSPACE}/ \
 	nbv bash
 
+nbv:
+	colcon build
+
+clean:
+	rm -rf build/ install/ log/
+
 gazebo:
 	ros2 launch kortex_bringup kortex_sim_control.launch.py \
 	use_sim_time:=true \
@@ -67,8 +73,5 @@ moveit-example:
 mission-interface:
 	ros2 run mission_interface mission_interface
 
-nbv:
-	colcon build
-
-clean:
-	rm -rf build/ install/ log/
+detect-object:
+	ros2 run next_best_view object_detection
