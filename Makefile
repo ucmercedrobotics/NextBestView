@@ -46,6 +46,7 @@ gazebo:
 
 moveit:
 	ros2 launch next_best_view moveit.launch.py \
+	use_sim_time:=true \
 	robot_ip:=yyy.yyy.yyy.yyy \
 	use_fake_hardware:=true \
 	vision:=true
