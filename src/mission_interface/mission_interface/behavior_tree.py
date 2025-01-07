@@ -2,10 +2,13 @@ import logging
 
 from lxml import etree
 
-from .tasking import TaskLeaf, ElementTags, Conditional, TASK_CONSTRUCTORS
-
-TRUE_BRANCH_IDX: int = 0
-FALSE_BRANCH_IDX: int = 1
+from .tasking import (
+    TaskLeaf,
+    ElementTags,
+    Conditional,
+    TASK_CONSTRUCTORS,
+    TRUE_BRANCH_IDX,
+)
 
 
 class BehaviorTree:
@@ -28,14 +31,18 @@ class BehaviorTree:
         if not self.task_root.has_child:
             return True
 
-        # start with the first side of the branch
-        curr: TaskLeaf = self.task_root.children[TRUE_BRANCH_IDX]
-        while curr is not None:
+        if self.task_root.has_conditional:
+            # start with the first side of the branch
             # TODO: execute task through action/service
             # TODO: check outcome
             # TODO: if true, next true child
             # TODO: if false, check if there is a FALSE_BRANCH_IDX child
             # TODO: if not, you've failed
+            # TODO: iterate recursively
+            pass
+
+        if self.task_root.next is not None:
+            # TODO: finish out rest of unconditional actions
             pass
 
         return True
@@ -45,9 +52,9 @@ class BehaviorTree:
     ):
         """
         Defines behavior tree recursively using Leaf classes defined above.
-            root
-             /\
-        leaf1  leaf2
+            root -> next1 -> next2
+             /\                /
+        leaf1  leaf2        leaf5
                  /\
             leaf3  leaf4
         """
@@ -82,7 +89,10 @@ class BehaviorTree:
                 self.logger.error(f"Found unknown element tag: {t.tag}")
 
             if parent is not None:
-                parent.set_child(task)
+                if parent.depth != task.depth:
+                    parent.add_branch(task)
+                else:
+                    parent.set_next(task)
             parent = task
 
     def _create_leaf(self, parent: TaskLeaf | None, name: str, depth: int) -> TaskLeaf:

@@ -63,6 +63,10 @@ class Conditional(str, Enum):
     NEQ = "neq"
 
 
+TRUE_BRANCH_IDX: int = 0
+FALSE_BRANCH_IDX: int = 1
+
+
 class TaskLeaf:
     """
     Base object for defining task:
@@ -79,22 +83,26 @@ class TaskLeaf:
         self.name: str = name
         self.action_type: ActionType = action_type
         self.depth: int = depth
+
+        self.next: TaskLeaf = None
         # this always goes (true, false) for condition in selecting child
-        self.children: list[TaskLeaf, TaskLeaf] = [None, None]
-        self.has_child: bool = False
+        self.branches: list[TaskLeaf] = []
+        self.has_branches: bool = False
+        self.has_conditional: bool = False
         # XML namespace
         self.namespace: str = namespace
 
-    def set_child(self, child: Self) -> None:
-        if self.children[0] is None:
-            self.children[0] = child
-        else:
-            self.children[1] = child
-        self.has_child = True
+    def set_next(self, next: Self) -> None:
+        self.next = next
+
+    def add_branch(self, child: Self) -> None:
+        self.branches.append(child)
+        self.has_branches = True
 
     def set_conditional(self, cond: Conditional, value: float) -> None:
         self.conditional: Conditional = cond
         self.compare_value: float = value
+        self.has_conditional = True
 
 
 class ActionLeaf(TaskLeaf, ABC):
