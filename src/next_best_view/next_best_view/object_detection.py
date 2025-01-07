@@ -58,8 +58,8 @@ class ObjectDetectionNode(Node):
         """Callback for synchronized RGB and depth images"""
         try:
             # Convert ROS Image messages to OpenCV format
-            rgb_image = self._imgmsg_to_cv2(color, desired_encoding="bgr8")
-            depth_image = self._imgmsg_to_cv2(depth, desired_encoding="passthrough")
+            rgb_image = self._imgmsg_to_cv2(color, desired_encoding="rgb8")
+            depth_image = self._imgmsg_to_cv2(depth, desired_encoding="16UC1")
 
             # Store synchronized frames with thread safety
             with self.frames_lock:
@@ -126,7 +126,10 @@ class ObjectDetectionNode(Node):
                     center_y = min(max(0, center_y), depth_h - 1)
 
                     # Get depth at center point (convert to meters)
-                    depth = float(frames["depth"][center_y, center_x]) / 1000.0
+                    depth = (
+                        float(np.average(frames["depth"][center_y, center_x])) / 1000.0
+                    )
+                    self.get_logger().info(f"{target_class} object depth {depth}m")
 
                     detections.append(
                         {
@@ -145,12 +148,11 @@ class ObjectDetectionNode(Node):
             best_detection = detections[0]
 
             # Calculate 3D position
-            # TODO: figure out what we have and adjust these
-            # TODO: check /camera/depth/camera_info
-            fx = 423.6848449707031
-            fy = 423.6848449707031
-            cx = 421.4840393066406
-            cy = 237.90074157714844
+            # TODO: figure out if we have and adjust these
+            fx = 360.01333
+            fy = 360.01333
+            cx = 243.87228
+            cy = 137.9218444
 
             X = (best_detection["center"][0] - cx) * best_detection["depth"] / fx
             Y = (best_detection["center"][1] - cy) * best_detection["depth"] / fy
@@ -182,7 +184,6 @@ class ObjectDetectionNode(Node):
             annotated_image = self._draw_detections(
                 frames["rgb"].copy(), detections, target_class
             )
-            cv2.imshow("image", annotated_image)
 
         # except Exception as e:
         #     self.get_logger().error(f"Detection failed: {str(e)}")
@@ -222,6 +223,9 @@ class ObjectDetectionNode(Node):
                 image_with_boxes, (int(center_x), int(center_y)), 4, (255, 0, 0), -1
             )
 
+            image_with_boxes = cv2.cvtColor(image_with_boxes, cv2.COLOR_BGR2RGB)
+            cv2.imwrite(f"{target_class}_detected.jpg", image_with_boxes)
+
         return image_with_boxes
 
     def _imgmsg_to_cv2(self, img_msg, desired_encoding):
@@ -234,9 +238,8 @@ class ObjectDetectionNode(Node):
         "bgr8" from https://robotics.stackexchange.com/questions/95630/cv-bridge-throws-boost-import-error-in-python-3-and-ros-melodic
         "passthrough" from https://gist.github.com/Merwanski/39580a5fc276583b0921eb44dd91a61e
         """
-        if desired_encoding == "bgr8":
+        if desired_encoding == "rgb8":
             dtype = np.dtype("uint8")  # Hardcode to 8 bits...
-            dtype = dtype.newbyteorder(">" if img_msg.is_bigendian else "<")
             image_opencv = np.ndarray(
                 shape=(
                     img_msg.height,
@@ -246,14 +249,26 @@ class ObjectDetectionNode(Node):
                 dtype=dtype,
                 buffer=img_msg.data,
             )
-            # If the byt order is different between the message and the system.
-            if img_msg.is_bigendian == (sys.byteorder == "little"):
-                image_opencv = image_opencv.byteswap().newbyteorder()
             return image_opencv
         else:
-            return np.frombuffer(img_msg.data, dtype=np.uint8).reshape(
-                img_msg.height, img_msg.width, -1
+            # Get the image dimensions
+            height = img_msg.height
+            width = img_msg.width
+
+            # Get raw data from message
+            raw_data = np.frombuffer(img_msg.data, dtype=np.uint8)
+
+            # Since the data is 16-bit but stored in 8-bit bytes,
+            # we need to reshape and reinterpret it
+            raw_data = raw_data.reshape(-1, 2)  # Pair bytes together
+            depth_data = raw_data[:, 0].astype(np.uint16) + (
+                raw_data[:, 1].astype(np.uint16) << 8
             )
+
+            # Reshape to 2D array with correct dimensions
+            image_opencv = depth_data.reshape(height, width)
+
+            return image_opencv
 
 
 def main(args=None):
