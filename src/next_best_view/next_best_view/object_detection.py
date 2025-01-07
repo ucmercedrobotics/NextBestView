@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from threading import Lock
-import sys
 
 import cv2
 import numpy as np
@@ -14,15 +13,15 @@ from sensor_msgs.msg import Image
 from kinova_action_interfaces.action import DetectObject
 
 
+METER_TO_MILLIMETER: float = 1000.0
+
+
 class ObjectDetectionNode(Node):
     def __init__(self):
         super().__init__("object_detection_node")
 
         self.debug: bool = True
 
-        # TODO: replace with cv_bridge once it's fixed
-        # Initialize CV Bridge
-        # self.bridge: CvBridge = CvBridge()
         # Load YOLO model
         self.model: YOLO = YOLO("yolo11n.pt")
 
@@ -40,8 +39,6 @@ class ObjectDetectionNode(Node):
 
         self._color_sub = Subscriber(self, Image, "/camera/color/image_raw")
         self._depth_sub = Subscriber(self, Image, "/camera/depth/image_raw")
-        # self._color_sub = Subscriber(self, Image, "/wrist_mounted_camera/image")
-        # self._depth_sub = Subscriber(self, Image, "/wrist_mounted_camera/depth_image")
         self._time_sync = ApproximateTimeSynchronizer(
             [
                 self._color_sub,
@@ -55,16 +52,16 @@ class ObjectDetectionNode(Node):
         self.get_logger().info("Object Detection Node has been started")
 
     def sync_callback(self, color: Image, depth: Image):
-        """Callback for synchronized RGB and depth images"""
+        """Callback for synchronized BGR and depth images"""
         try:
             # Convert ROS Image messages to OpenCV format
-            rgb_image = self._imgmsg_to_cv2(color, desired_encoding="bgr8")
-            depth_image = self._imgmsg_to_cv2(depth, desired_encoding="passthrough")
+            bgr_image = self._imgmsg_to_cv2(color, desired_encoding="bgr8")
+            depth_image = self._imgmsg_to_cv2(depth, desired_encoding="16UC1")
 
             # Store synchronized frames with thread safety
             with self.frames_lock:
                 self.latest_frames = {
-                    "rgb": rgb_image,
+                    "bgr": bgr_image,
                     "depth": depth_image,
                 }
 
@@ -75,6 +72,7 @@ class ObjectDetectionNode(Node):
         """Action server callback to process detection requests"""
         self.get_logger().info("Received detection request")
 
+        # create DetectObject action type messages
         feedback_msg = DetectObject.Feedback()
         result = DetectObject.Result()
 
@@ -88,107 +86,126 @@ class ObjectDetectionNode(Node):
                 raise RuntimeError("No synchronized frame data available")
             frames = self.latest_frames.copy()
 
-        # try:
+        try:
+            # Run YOLOv11 detection on BGR image
+            results = self.model(frames["bgr"])
 
-        # Run YOLOv8 detection on RGB image
-        results = self.model(frames["rgb"])
+            # Get image dimensions
+            bgr_h, bgr_w = frames["bgr"].shape[:2]
+            depth_h, depth_w = frames["depth"].shape[:2]
 
-        # Get image dimensions
-        rgb_h, rgb_w = frames["rgb"].shape[:2]
-        depth_h, depth_w = frames["depth"].shape[:2]
+            # Calculate scaling factors
+            scale_x = depth_w / bgr_w
+            scale_y = depth_h / bgr_h
 
-        # Calculate scaling factors
-        scale_x = depth_w / rgb_w
-        scale_y = depth_h / rgb_h
+            # Get detections for requested object class
+            detections = []
 
-        # Get detections for requested object class
-        detections = []
+            # iterate through all object results
+            for r in results:
+                boxes = r.boxes
+                for box in boxes:
+                    cls = int(box.cls[0])
+                    cls_name = self.model.names[cls]
 
-        for r in results:
-            boxes = r.boxes
-            for box in boxes:
-                cls = int(box.cls[0])
-                cls_name = self.model.names[cls]
+                    # if one of the objects is what you were looking for
+                    if target_class in cls_name:
+                        conf = float(box.conf[0])
+                        # bounding box (bgr)
+                        x1, y1, x2, y2 = box.xyxy[0].tolist()
 
-                if target_class in cls_name:
-                    conf = float(box.conf[0])
-                    x1, y1, x2, y2 = box.xyxy[0].tolist()
+                        # Calculate center point (bgr)
+                        bgr_center_x = int((x1 + x2) / 2)
+                        bgr_center_y = int((y1 + y2) / 2)
 
-                    # Calculate center point
-                    rgb_center_x = int((x1 + x2) / 2)
-                    rgb_center_y = int((y1 + y2) / 2)
+                        # Calculate center point (depth)
+                        center_x = int(bgr_center_x * scale_x)
+                        center_y = int(bgr_center_y * scale_y)
 
-                    center_x = int(rgb_center_x * scale_x)
-                    center_y = int(rgb_center_y * scale_y)
+                        # Ensure we're within depth image bounds (depth)
+                        center_x = min(max(0, center_x), depth_w - 1)
+                        center_y = min(max(0, center_y), depth_h - 1)
 
-                    # Ensure we're within depth image bounds
-                    center_x = min(max(0, center_x), depth_w - 1)
-                    center_y = min(max(0, center_y), depth_h - 1)
+                        # Get depth at center point (convert to meters)
+                        depth = (
+                            float(np.average(frames["depth"][center_y, center_x]))
+                            / METER_TO_MILLIMETER
+                        )
+                        self.get_logger().info(
+                            f"{target_class} object detected at depth of {depth}m"
+                        )
 
-                    # Get depth at center point (convert to meters)
-                    depth = float(frames["depth"][center_y, center_x]) / 1000.0
+                        detections.append(
+                            {
+                                "confidence": conf,
+                                "bbox": [x1, y1, x2, y2],
+                                "center": [bgr_center_x, bgr_center_y],
+                                "depth": depth,
+                                "depth_center": [center_x, center_y],
+                            }
+                        )
 
-                    detections.append(
-                        {
-                            "confidence": conf,
-                            "bbox": [x1, y1, x2, y2],
-                            "center": [rgb_center_x, rgb_center_y],
-                            "depth": depth,
-                            "depth_center": [center_x, center_y],
-                        }
-                    )
+            # Sort detections by confidence
+            detections.sort(key=lambda x: x["confidence"], reverse=True)
 
-        # Sort detections by confidence
-        detections.sort(key=lambda x: x["confidence"], reverse=True)
+            if detections:
+                best_detection = detections[0]
 
-        if detections:
-            best_detection = detections[0]
+                # Calculate 3D position
+                # TODO: move these into some configuration for the camera or parse them from the /camera_info topic
+                fx = 360.01333
+                fy = 360.01333
+                cx = 243.87228
+                cy = 137.9218444
 
-            # Calculate 3D position
-            # TODO: figure out what we have and adjust these
-            # TODO: check /camera/depth/camera_info
-            fx = 423.6848449707031
-            fy = 423.6848449707031
-            cx = 421.4840393066406
-            cy = 237.90074157714844
+                # this represents the object's left-right position (left is negative, right is positive).
+                X = (
+                    (best_detection["depth_center"][0] - cx)
+                    * best_detection["depth"]
+                    / fx
+                )
+                # this represents the object's up-down position (up is negative, down is positive).
+                Y = (
+                    (best_detection["depth_center"][1] - cy)
+                    * best_detection["depth"]
+                    / fy
+                )
+                # depth
+                Z = best_detection["depth"]
 
-            X = (best_detection["center"][0] - cx) * best_detection["depth"] / fx
-            Y = (best_detection["center"][1] - cy) * best_detection["depth"] / fy
-            Z = best_detection["depth"]
+                # Set result
+                result.success = True
+                result.position.x = float(X)
+                result.position.y = float(Y)
+                result.position.z = float(Z)
+                result.confidence = best_detection["confidence"]
 
-            # Set result
-            result.success = True
-            result.position.x = float(X)
-            result.position.y = float(Y)
-            result.position.z = float(Z)
-            result.confidence = best_detection["confidence"]
+                # Send feedback
+                feedback_msg.processing_status = (
+                    f"Object detected at ({X:.2f}, {Y:.2f}, {Z:.2f}) "
+                    f"with confidence: {result.confidence:.2f}"
+                )
+                goal_handle.publish_feedback(feedback_msg)
 
-            # Send feedback
-            feedback_msg.processing_status = (
-                f"Object detected at ({X:.2f}, {Y:.2f}, {Z:.2f}) "
-                f"with confidence: {result.confidence:.2f}"
-            )
-            goal_handle.publish_feedback(feedback_msg)
+            else:
+                result.success = False
+                result.confidence = 0.0
+                feedback_msg.processing_status = f"No {target_class} found in image"
+                goal_handle.publish_feedback(feedback_msg)
 
-        else:
+            goal_handle.succeed()
+
+            if self.debug == True:  # Print debug images
+                annotated_image = self._draw_detections(
+                    frames["bgr"].copy(), detections, target_class
+                )
+                cv2.imwrite(f"{target_class}_detected.jpg", annotated_image)
+
+        except Exception as e:
+            self.get_logger().error(f"Detection failed: {str(e)}")
             result.success = False
             result.confidence = 0.0
-            feedback_msg.processing_status = f"No {target_class} found in image"
-            goal_handle.publish_feedback(feedback_msg)
-
-        goal_handle.succeed()
-
-        if self.debug == True:  # Print debug images
-            annotated_image = self._draw_detections(
-                frames["rgb"].copy(), detections, target_class
-            )
-            cv2.imshow("image", annotated_image)
-
-        # except Exception as e:
-        #     self.get_logger().error(f"Detection failed: {str(e)}")
-        #     result.success = False
-        #     result.confidence = 0.0
-        #     goal_handle.succeed()
+            goal_handle.succeed()
 
         return result
 
@@ -222,6 +239,9 @@ class ObjectDetectionNode(Node):
                 image_with_boxes, (int(center_x), int(center_y)), 4, (255, 0, 0), -1
             )
 
+            # the kinova camera natively is BGR. Convert to RGB.
+            image_with_boxes = cv2.cvtColor(image_with_boxes, cv2.COLOR_BGR2RGB)
+
         return image_with_boxes
 
     def _imgmsg_to_cv2(self, img_msg, desired_encoding):
@@ -236,24 +256,35 @@ class ObjectDetectionNode(Node):
         """
         if desired_encoding == "bgr8":
             dtype = np.dtype("uint8")  # Hardcode to 8 bits...
-            dtype = dtype.newbyteorder(">" if img_msg.is_bigendian else "<")
             image_opencv = np.ndarray(
                 shape=(
                     img_msg.height,
                     img_msg.width,
                     3,
-                ),  # and three channels of data. Since OpenCV works with bgr natively, we don't need to reorder the channels.
+                ),
                 dtype=dtype,
                 buffer=img_msg.data,
             )
-            # If the byt order is different between the message and the system.
-            if img_msg.is_bigendian == (sys.byteorder == "little"):
-                image_opencv = image_opencv.byteswap().newbyteorder()
             return image_opencv
         else:
-            return np.frombuffer(img_msg.data, dtype=np.uint8).reshape(
-                img_msg.height, img_msg.width, -1
+            # Get the image dimensions
+            height = img_msg.height
+            width = img_msg.width
+
+            # Get raw data from message
+            raw_data = np.frombuffer(img_msg.data, dtype=np.uint8)
+
+            # Since the data is 16-bit but stored in 8-bit bytes,
+            # we need to reshape and reinterpret it
+            raw_data = raw_data.reshape(-1, 2)  # Pair bytes together
+            depth_data = raw_data[:, 0].astype(np.uint16) + (
+                raw_data[:, 1].astype(np.uint16) << 8
             )
+
+            # Reshape to 2D array with correct dimensions
+            image_opencv = depth_data.reshape(height, width)
+
+            return image_opencv
 
 
 def main(args=None):

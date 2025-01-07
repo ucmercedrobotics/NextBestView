@@ -34,16 +34,15 @@ make vnc
 ```
 
 ### Simulation
-Then run the sim container:
+To start the Docker environment:
 ```bash
 make bash
 ```
 
-Finally, from within the container, build your ROS2 project run the sim command:
+Finally, to launch the ROS2 simulated drivers for MoveIt Kortex control:
 ```bash
 make moveit
 ```
-NOTE: currently this runs without the bracelet. To add this, more config must be done to the launch file to find the right model.
 
 ### Target
 Make sure you're on the same subnet as the Kinova and plugged in via ethernet. Then run the NIC setup command:
@@ -66,7 +65,9 @@ Finally, to launch the ROS2 drivers for MoveIt Kortex control:
 make moveit-target
 ```
 
-If you want to see the robot move, you can launch the custom example node we prebuilt:
+### Example
+If you want to see the robot move in sim or on target, you can launch the custom example node we prebuilt.
+This will just move the arm to an arbitrary position:
 ```bash
 make moveit-example
 ```
@@ -78,6 +79,8 @@ From there, run the following command:
 make vision
 ```
 This will bring up the vision ROS2 node that exposes the RGBD camera on ROS2 topics and can be visualized in RViz.
+
+NOTE: this works only with hardware connected.
 
 ## Using with Mission Planning (MP)
 Currently, control with an XML generated mission plan is under implementation.
