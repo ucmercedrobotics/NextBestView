@@ -73,11 +73,11 @@ class ObjectDetectionNode(Node):
         self.get_logger().info("Received detection request")
 
         # create DetectObject action type messages
-        feedback_msg = DetectObject.Feedback()
-        result = DetectObject.Result()
+        feedback_msg: DetectObject.Feedback = DetectObject.Feedback()
+        result: DetectObject.Result = DetectObject.Result()
 
         # Get the target class from the goal
-        target_class = goal_handle.request.target_class
+        target_class: str = goal_handle.request.target_class
         # TODO: add colors here
 
         # Get latest synchronized frames with thread safety
@@ -109,7 +109,7 @@ class ObjectDetectionNode(Node):
                     cls_name = self.model.names[cls]
 
                     # if one of the objects is what you were looking for
-                    if target_class in cls_name:
+                    if target_class.lower() in cls_name.lower():
                         conf = float(box.conf[0])
                         # bounding box (bgr)
                         x1, y1, x2, y2 = box.xyxy[0].tolist()

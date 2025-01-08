@@ -63,6 +63,12 @@ class Conditional(str, Enum):
     NEQ = "neq"
 
 
+class Condition:
+    def __init__(self, conditional: Conditional, value: float | str):
+        self.conditional: Conditional = conditional
+        self.value: float | str = value
+
+
 TRUE_BRANCH_IDX: int = 0
 FALSE_BRANCH_IDX: int = 1
 
@@ -87,8 +93,9 @@ class TaskLeaf:
         self.next: TaskLeaf = None
         # this always goes (true, false) for condition in selecting child
         self.branches: list[TaskLeaf] = []
+        self.conditionals: list[Condition] = []
         self.has_branches: bool = False
-        self.has_conditional: bool = False
+        self.has_conditionals: bool = False
         # XML namespace
         self.namespace: str = namespace
 
@@ -99,10 +106,9 @@ class TaskLeaf:
         self.branches.append(child)
         self.has_branches = True
 
-    def set_conditional(self, cond: Conditional, value: float) -> None:
-        self.conditional: Conditional = cond
-        self.compare_value: float = value
-        self.has_conditional = True
+    def add_conditional(self, condition: Condition) -> None:
+        self.conditionals.append(condition)
+        self.has_conditionals = True
 
 
 class ActionLeaf(TaskLeaf, ABC):
