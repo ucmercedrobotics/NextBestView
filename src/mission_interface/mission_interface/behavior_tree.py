@@ -6,8 +6,8 @@ from .tasking import (
     TaskLeaf,
     ElementTags,
     Conditional,
+    Condition,
     TASK_CONSTRUCTORS,
-    TRUE_BRANCH_IDX,
 )
 
 
@@ -26,26 +26,6 @@ class BehaviorTree:
         self.xml_root: etree._Element = root
 
         self._define_tree(sequence)
-
-    def execute_tasks(self) -> bool:
-        if not self.task_root.has_child:
-            return True
-
-        if self.task_root.has_conditional:
-            # start with the first side of the branch
-            # TODO: execute task through action/service
-            # TODO: check outcome
-            # TODO: if true, next true child
-            # TODO: if false, check if there is a FALSE_BRANCH_IDX child
-            # TODO: if not, you've failed
-            # TODO: iterate recursively
-            pass
-
-        if self.task_root.next is not None:
-            # TODO: finish out rest of unconditional actions
-            pass
-
-        return True
 
     def _define_tree(
         self, sequence: etree._Element, parent: TaskLeaf = None, depth: int = 0
@@ -78,7 +58,9 @@ class BehaviorTree:
                             f"Adding condition -> {comp.text}: {val.text}"
                         )
                         # set conditionals to current task
-                        parent.set_conditional(Conditional(comp.text), float(val.text))
+                        parent.add_conditional(
+                            Condition(Conditional(comp.text), float(val.text))
+                        )
                     # recursively iterate down this branch
                     self._define_tree(
                         t.find(self.namespace + ElementTags.SEQUENCE), parent, depth + 1
