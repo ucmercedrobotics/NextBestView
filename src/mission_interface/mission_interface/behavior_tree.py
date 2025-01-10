@@ -83,7 +83,7 @@ class BehaviorTree:
             if tr == TaskResult.TRUE:
                 cond = Condition(Comparator.EQ, True)
             elif tr == TaskResult.FALSE:
-                cond = Condition(Comparator.EQ, True)
+                cond = Condition(Comparator.EQ, False)
             else:
                 self.logger.error(
                     f"Invalid comparator in {ElementTags.RETURNSTATUS}: {tr}"
