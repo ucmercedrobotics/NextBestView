@@ -12,11 +12,11 @@
                 <!-- I don't think these are needed in the global task definition -->
                 <!-- <xs:element name="StateVariables" type="StateVariablesType"/>
                 <xs:element name="Parameters" type="ParametersType"/> -->
-                <xs:element name="Preconditions" type="PreconditionsType"/>
+                <xs:element name="Preconditions" type="PreconditionsType" minOccurs="0"/>
                 <xs:element name="AtomicTasks" type="AtomicTasksType"/>
                 <xs:element name="ActionSequence" type="ActionSequenceType"/>
-                <xs:element name="Outcome" type="OutcomeType"/>
-                <xs:element name="Exits" type="ExitsType"/>
+                <xs:element name="Outcome" type="OutcomeType" minOccurs="0"/>
+                <xs:element name="Exits" type="ExitsType" minOccurs="0"/>
             </xs:sequence>
         </xs:complexType>
     </xs:element>
@@ -70,7 +70,7 @@
     <!-- Complex type for nextBestView -->
     <xs:complexType name="nextBestViewType">
         <xs:sequence>
-            <!-- quality of digital twin on a scale from 1-10 -->
+            <!-- quality of digital twin on a scale from 1-10, which aligns with how many images to take to generate 3D point cloud -->
             <xs:element name="resolution" type="xs:integer"/>
         </xs:sequence>
     </xs:complexType>
@@ -142,7 +142,7 @@
     <!-- Simple type for Condition Types -->
     <xs:simpleType name="stateTypes">
         <xs:restriction base="xs:string">
-            <xs:enumeration value="atOrigin"/>
+            <xs:enumeration value="atHomeBase"/>
         </xs:restriction>
     </xs:simpleType>
 
@@ -170,7 +170,7 @@
                         <xs:element name="TaskDescription" type="xs:string"/>
                         <xs:element name="StateVariables" type="StateVariablesType" minOccurs="0"/>
                         <xs:element name="Action" type="manipulatorActions" minOccurs="0" maxOccurs="1"/>
-                        <xs:element name="Parameters" type="ParametersType"/>
+                        <xs:element name="Parameters" type="ParametersType" minOccurs="0"/>
                         <xs:element name="Preconditions" type="PreconditionsType" minOccurs="0"/>
                     </xs:sequence>
                 </xs:complexType>
@@ -224,7 +224,7 @@
     <!-- Complex type for Outcome -->
     <xs:complexType name="OutcomeType">
         <xs:sequence>
-            <xs:element name="State" type="stateTypes" maxOccurs="unbounded"/>
+            <xs:element name="State" type="stateTypes" minOccurs="0"/>
         </xs:sequence>
     </xs:complexType>
 
@@ -239,7 +239,7 @@
     <!-- Complex type for Exits -->
     <xs:complexType name="ExitsType">
         <xs:sequence>
-            <xs:element name="Exit" maxOccurs="unbounded">
+            <xs:element name="Exit" minOccurs="0">
                 <xs:complexType>
                     <xs:sequence>
                         <xs:element name="Type" type="exitTypes"/>
