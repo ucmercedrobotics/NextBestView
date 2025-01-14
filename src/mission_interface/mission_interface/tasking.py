@@ -26,6 +26,7 @@ class ElementTags(str, Enum):
     PARAMETERS = "Parameters"
     PRECONDITION = "Precondition"
     PRECONDITIONS = "Preconditions"
+    RETURNSTATUS = "ReturnStatus"
     SEQUENCE = "Sequence"
     TASKID = "TaskID"
     VARIABLENAME = "VariableName"
@@ -33,7 +34,7 @@ class ElementTags(str, Enum):
 
 
 class ActionType(str, Enum):
-    GOTOLOCATION = "goToLocation"
+    GOTOPOSITION = "goToPosition"
     GRABOBJECT = "grabObject"
     IDENTIFYOBJECT = "identifyObject"
     NEXTBESTVIEW = "nextBestView"
@@ -54,7 +55,7 @@ class ParameterTypes(str, Enum):
     Z = "z"
 
 
-class Conditional(str, Enum):
+class Comparator(str, Enum):
     EQ = "eq"
     GT = "gt"
     GTE = "gte"
@@ -63,10 +64,15 @@ class Conditional(str, Enum):
     NEQ = "neq"
 
 
+class TaskResult(str, Enum):
+    TRUE = "true"
+    FALSE = "false"
+
+
 class Condition:
-    def __init__(self, conditional: Conditional, value: float | str):
-        self.conditional: Conditional = conditional
-        self.value: float | str = value
+    def __init__(self, comparator: Comparator, value: float | str):
+        self.comparator: Comparator = comparator
+        self.value: float | str | bool = value
 
 
 TRUE_BRANCH_IDX: int = 0
@@ -164,9 +170,7 @@ class GoToPositionLeaf(ActionLeaf):
 
     def __repr__(self) -> str:
         out: str = (
-            f"name: {self.name} \
-            actionType: {self.action_type} \
-            x: {self.x}"
+            f"name: {self.name}, actionType: {self.action_type}, x: {self.x}, y: {self.y}, z: {self.z}"
         )
 
         return out
@@ -202,10 +206,7 @@ class IdentifyObjectLeaf(ActionLeaf):
 
     def __repr__(self) -> str:
         out: str = (
-            f"name: {self.name} \
-            actionType: {self.action_type} \
-            objectName: {self.object_name} \
-            objectColors: "
+            f"name: {self.name}, actionType: {self.action_type}, objectName: {self.object_name}, objectColors: "
         )
 
         for c in self.colors:
@@ -234,9 +235,7 @@ class NextBestViewLeaf(ActionLeaf):
 
     def __repr__(self) -> str:
         out: str = (
-            f"name: {self.name} \
-            actionType: {self.action_type} \
-            resolution: {self.resolution}"
+            f"name: {self.name}, actionType: {self.action_type}, resolution: {self.resolution}"
         )
 
         return out

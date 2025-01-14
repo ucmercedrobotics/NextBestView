@@ -5,8 +5,9 @@ from lxml import etree
 from .tasking import (
     TaskLeaf,
     ElementTags,
-    Conditional,
+    Comparator,
     Condition,
+    TaskResult,
     TASK_CONSTRUCTORS,
 )
 
@@ -47,24 +48,12 @@ class BehaviorTree:
             elif t.tag == self.namespace + ElementTags.CONDITIONALACTIONS:
                 cond: etree._Element = t.find(self.namespace + ElementTags.CONDITONAL)
                 if cond is not None:
-                    comp: etree._Element = cond.find(
-                        self.namespace + ElementTags.COMPARATOR
-                    )
-                    val: etree._Element = cond.find(
-                        self.namespace + ElementTags.HARDVALUE
-                    )
-                    if comp is not None and val is not None:
-                        self.logger.debug(
-                            f"Adding condition -> {comp.text}: {val.text}"
-                        )
-                        # set conditionals to current task
-                        parent.add_conditional(
-                            Condition(Conditional(comp.text), float(val.text))
-                        )
+                    self._parse_conditional_xml(parent, cond)
                     # recursively iterate down this branch
                     self._define_tree(
                         t.find(self.namespace + ElementTags.SEQUENCE), parent, depth + 1
                     )
+            # if there is a comment in the XML, skip it
             elif isinstance(t, etree._Comment):
                 continue
             else:
@@ -76,6 +65,42 @@ class BehaviorTree:
                 else:
                     parent.set_next(task)
             parent = task
+
+    def _parse_conditional_xml(
+        self, parent: TaskLeaf, conditional: etree._Element
+    ) -> bool:
+        # this shouldn't happen
+        if parent is None:
+            return False
+
+        rs: etree._Element = conditional.find(self.namespace + ElementTags.RETURNSTATUS)
+        comp: etree._Element = conditional.find(self.namespace + ElementTags.COMPARATOR)
+
+        if rs is not None:
+            tr: TaskResult = TaskResult(rs.text)
+            cond: Condition = None
+
+            if tr == TaskResult.TRUE:
+                cond = Condition(Comparator.EQ, True)
+            elif tr == TaskResult.FALSE:
+                cond = Condition(Comparator.EQ, False)
+            else:
+                self.logger.error(
+                    f"Invalid comparator in {ElementTags.RETURNSTATUS}: {tr}"
+                )
+                return False
+
+            parent.add_conditional(cond)
+            self.logger.debug(
+                f"Added comparator for {parent.name} of {ElementTags.RETURNSTATUS}: {tr}"
+            )
+        elif comp is not None:
+            # TODO: implement <>= comparisons here
+            # TODO: used for float value comparisons and more abstract str comparisons
+            pass
+        else:
+            self.logger.error(f"Invalid conditional sequence for {parent.name}")
+            return False
 
     def _create_leaf(self, parent: TaskLeaf | None, name: str, depth: int) -> TaskLeaf:
         """
@@ -107,10 +132,15 @@ class BehaviorTree:
         # to make this generic, the action will always be after the action type
         action: etree._Element = action_type.getnext()
 
-        # find from the dictionary which constructor to use
-        t = TASK_CONSTRUCTORS[action_type.text](
-            name, action_type.text, depth, self.namespace, action
-        )
+        try:
+            # find from the dictionary which constructor to use
+            t = TASK_CONSTRUCTORS[action_type.text](
+                name, action_type.text, depth, self.namespace, action
+            )
+        except:
+            self.logger.error(
+                f"Invalid action type {action_type.text}. No implementation found..."
+            )
         # NOTE: this is the root task of the behavior tree
         if parent is None:
             self.task_root = t
@@ -126,9 +156,7 @@ class BehaviorTree:
         curr = self.task_root.children[0]
         while curr is not None:
             self.logger.debug(
-                f"name: {curr.name} \
-                  type: {curr.action_type} \
-                  depth: {curr.depth}"
+                f"name: {curr.name}, type: {curr.action_type}, depth: {curr.depth}"
             )
             curr = curr.children[0]
 

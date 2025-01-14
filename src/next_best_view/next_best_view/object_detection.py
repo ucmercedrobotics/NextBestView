@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from typing import Tuple
 from threading import Lock
 
 import cv2
@@ -87,63 +88,7 @@ class ObjectDetectionNode(Node):
             frames = self.latest_frames.copy()
 
         try:
-            # Run YOLOv11 detection on BGR image
-            results = self.model(frames["bgr"])
-
-            # Get image dimensions
-            bgr_h, bgr_w = frames["bgr"].shape[:2]
-            depth_h, depth_w = frames["depth"].shape[:2]
-
-            # Calculate scaling factors
-            scale_x = depth_w / bgr_w
-            scale_y = depth_h / bgr_h
-
-            # Get detections for requested object class
-            detections = []
-
-            # iterate through all object results
-            for r in results:
-                boxes = r.boxes
-                for box in boxes:
-                    cls = int(box.cls[0])
-                    cls_name = self.model.names[cls]
-
-                    # if one of the objects is what you were looking for
-                    if target_class.lower() in cls_name.lower():
-                        conf = float(box.conf[0])
-                        # bounding box (bgr)
-                        x1, y1, x2, y2 = box.xyxy[0].tolist()
-
-                        # Calculate center point (bgr)
-                        bgr_center_x = int((x1 + x2) / 2)
-                        bgr_center_y = int((y1 + y2) / 2)
-
-                        # Calculate center point (depth)
-                        center_x = int(bgr_center_x * scale_x)
-                        center_y = int(bgr_center_y * scale_y)
-
-                        # Ensure we're within depth image bounds (depth)
-                        center_x = min(max(0, center_x), depth_w - 1)
-                        center_y = min(max(0, center_y), depth_h - 1)
-
-                        # Get depth at center point (convert to meters)
-                        depth = (
-                            float(np.average(frames["depth"][center_y, center_x]))
-                            / METER_TO_MILLIMETER
-                        )
-                        self.get_logger().info(
-                            f"{target_class} object detected at depth of {depth}m"
-                        )
-
-                        detections.append(
-                            {
-                                "confidence": conf,
-                                "bbox": [x1, y1, x2, y2],
-                                "center": [bgr_center_x, bgr_center_y],
-                                "depth": depth,
-                                "depth_center": [center_x, center_y],
-                            }
-                        )
+            detections = self._yolo_object_detection(frames, target_class)
 
             # Sort detections by confidence
             detections.sort(key=lambda x: x["confidence"], reverse=True)
@@ -151,27 +96,7 @@ class ObjectDetectionNode(Node):
             if detections:
                 best_detection = detections[0]
 
-                # Calculate 3D position
-                # TODO: move these into some configuration for the camera or parse them from the /camera_info topic
-                fx = 360.01333
-                fy = 360.01333
-                cx = 243.87228
-                cy = 137.9218444
-
-                # this represents the object's left-right position (left is negative, right is positive).
-                X = (
-                    (best_detection["depth_center"][0] - cx)
-                    * best_detection["depth"]
-                    / fx
-                )
-                # this represents the object's up-down position (up is negative, down is positive).
-                Y = (
-                    (best_detection["depth_center"][1] - cy)
-                    * best_detection["depth"]
-                    / fy
-                )
-                # depth
-                Z = best_detection["depth"]
+                X, Y, Z = self._compute_3d_position(best_detection)
 
                 # Set result
                 result.success = True
@@ -208,6 +133,84 @@ class ObjectDetectionNode(Node):
             goal_handle.succeed()
 
         return result
+
+    def _yolo_object_detection(self, frames, target_class) -> list[dict]:
+        # Run YOLOv11 detection on BGR image
+        results = self.model(frames["bgr"])
+
+        # Get image dimensions
+        bgr_h, bgr_w = frames["bgr"].shape[:2]
+        depth_h, depth_w = frames["depth"].shape[:2]
+
+        # Calculate scaling factors
+        scale_x = depth_w / bgr_w
+        scale_y = depth_h / bgr_h
+
+        # Get detections for requested object class
+        detections = []
+
+        # iterate through all object results
+        for r in results:
+            boxes = r.boxes
+            for box in boxes:
+                cls = int(box.cls[0])
+                cls_name = self.model.names[cls]
+
+                # if one of the objects is what you were looking for
+                if target_class.lower() in cls_name.lower():
+                    conf = float(box.conf[0])
+                    # bounding box (bgr)
+                    x1, y1, x2, y2 = box.xyxy[0].tolist()
+
+                    # Calculate center point (bgr)
+                    bgr_center_x = int((x1 + x2) / 2)
+                    bgr_center_y = int((y1 + y2) / 2)
+
+                    # Calculate center point (depth)
+                    center_x = int(bgr_center_x * scale_x)
+                    center_y = int(bgr_center_y * scale_y)
+
+                    # Ensure we're within depth image bounds (depth)
+                    center_x = min(max(0, center_x), depth_w - 1)
+                    center_y = min(max(0, center_y), depth_h - 1)
+
+                    # Get depth at center point (convert to meters)
+                    depth = (
+                        float(np.average(frames["depth"][center_y, center_x]))
+                        / METER_TO_MILLIMETER
+                    )
+                    self.get_logger().info(
+                        f"{target_class} object detected at depth of {depth}m"
+                    )
+
+                    detections.append(
+                        {
+                            "confidence": conf,
+                            "bbox": [x1, y1, x2, y2],
+                            "center": [bgr_center_x, bgr_center_y],
+                            "depth": depth,
+                            "depth_center": [center_x, center_y],
+                        }
+                    )
+
+        return detections
+
+    def _compute_3d_position(self, object) -> Tuple[float, float, float]:
+        # Calculate 3D position
+        # TODO: move these into some configuration for the camera or parse them from the /camera_info topic
+        fx = 360.01333
+        fy = 360.01333
+        cx = 243.87228
+        cy = 137.9218444
+
+        # this represents the object's left-right position (left is negative, right is positive).
+        X = (object["depth_center"][0] - cx) * object["depth"] / fx
+        # this represents the object's up-down position (up is negative, down is positive).
+        Y = (object["depth_center"][1] - cy) * object["depth"] / fy
+        # depth
+        Z = object["depth"]
+
+        return X, Y, Z
 
     def _draw_detections(self, image, detections, target_class):
         """Draw bounding boxes and labels on the image"""

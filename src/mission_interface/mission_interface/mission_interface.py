@@ -9,7 +9,7 @@ from rclpy.action import ActionClient
 from .network_interface import NetworkInterface
 from .mission_decoder import MissionDecoder
 from .behavior_tree import BehaviorTree
-from .tasking import TaskLeaf, IdentifyObjectLeaf, NextBestViewLeaf
+from .tasking import TaskLeaf, IdentifyObjectLeaf, NextBestViewLeaf, GoToPositionLeaf
 from kinova_action_interfaces.action import DetectObject
 
 
@@ -53,6 +53,7 @@ class MissionInterface(Node):
         self.action_callback_map: dict = {
             "identifyObject": self._send_detect_object_goal,
             "nextBestView": self._send_nbv_goal,
+            "goToPosition": self._send_kinova_go_to_goal,
         }
 
         # while True:
@@ -76,17 +77,20 @@ class MissionInterface(Node):
         else:
             self.get_logger().error(e)
 
-        # if there is at least one task in the tree
-        if self.behavior_tree.task_root is not None:
-            # TODO: update this with a custom message that has a list of waypoints and robot actions
-            self.get_logger().debug("Mission plan received successfully...")
-            # self.behavior_tree.__repr__()
-            ret = self._execute_tasks(self.behavior_tree.task_root)
-        # if you actually didn't receive anything
+        if self.behavior_tree is None:
+            self.get_logger().error(f"Empty behavior tree...")
         else:
-            os.remove(temp_xml_path)
-            self.get_logger().error("Mission plan not received...")
-            return False
+            # if there is at least one task in the tree
+            if self.behavior_tree.task_root is not None:
+                # TODO: update this with a custom message that has a list of waypoints and robot actions
+                self.get_logger().debug("Mission plan received successfully...")
+                # self.behavior_tree.__repr__()
+                ret = self._execute_tasks(self.behavior_tree.task_root)
+            # if you actually didn't receive anything
+            else:
+                os.remove(temp_xml_path)
+                self.get_logger().error("Mission plan not received...")
+                return False
 
         return ret
 
@@ -95,28 +99,29 @@ class MissionInterface(Node):
             self.get_logger(), self.log_directory, host, port
         )
 
-    def _execute_tasks(self, root: TaskLeaf) -> bool:
+    def _execute_tasks(self, root: TaskLeaf) -> None:
         curr: TaskLeaf = root
         while curr is not None:
+            # TODO: decide if returning the entire action message result is a better design
+            # TODO: feedback can be parsed by function from within tasking.py for each respective TaskLeaf subclass
+            success: bool = self.action_callback_map[curr.action_type](curr)
             # if you have a conditional statment, this will always come first
             if curr.has_conditionals:
-                # start with the first side of the branch
-                # TODO: execute task through action/service
-                # TODO: check outcome
-                # TODO: if true, next true child
-                # TODO: if false, check if there is a FALSE_BRANCH_IDX child
-                # TODO: if not, you've failed
-                # TODO: iterate recursively
-                pass
-
-            # otherwise, you would only have linear tasks, but you can have both.
-            self.action_callback_map[curr.action_type](curr)
+                for b, c in zip(curr.branches, curr.conditionals):
+                    if isinstance(c.value, bool):
+                        if c.value == success:
+                            self.get_logger().info(
+                                f"Executing {success} {c.comparator} {c.value} conditional branch of {curr.name}"
+                            )
+                            self._execute_tasks(b)
+                    else:
+                        self.get_logger().error(
+                            f"Currently, {type(c.value)} comparisons are not supported. See {curr.name} and fix."
+                        )
 
             curr = curr.next
 
-        return True
-
-    def _send_detect_object_goal(self, task: IdentifyObjectLeaf):
+    def _send_detect_object_goal(self, task: IdentifyObjectLeaf) -> bool:
         goal: DetectObject.Goal = DetectObject.Goal()
         goal.target_class = task.object_name
         goal.colors = task.colors
@@ -125,42 +130,61 @@ class MissionInterface(Node):
         self.get_logger().info(
             f"Detect Object Action server available. Sending goal to find {goal.target_class}..."
         )
-        self.detect_object_client.send_goal_async(goal).add_done_callback(
-            self.goal_response_callback
+
+        future = self.detect_object_client.send_goal_async(goal)
+
+        rclpy.spin_until_future_complete(self, future)
+
+        result_future = self._goal_response_callback(future)
+
+        rclpy.spin_until_future_complete(self, result_future)
+
+        result = self._result_callback(result_future)
+
+        self.get_logger().debug(
+            f"Detect Object Action Result: \n\
+        X = {result.position.x} \n\
+        Y = {result.position.y} \n\
+        Z = {result.position.z} \n\
+        confidence = {result.confidence}"
         )
 
         # TODO: add centering inverse kinematic action call (moveit)
 
+        # return result.success
+        return True
+
     def _send_nbv_goal(self, task: NextBestViewLeaf):
         pass
 
-    def goal_response_callback(self, future):
+    def _send_kinova_go_to_goal(self, task: GoToPositionLeaf):
+        pass
+
+    def _goal_response_callback(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().info("Goal rejected")
             return
 
         self.get_logger().info("Goal accepted")
-        goal_handle.get_result_async().add_done_callback(self.result_callback)
 
-    def result_callback(self, future):
+        return goal_handle.get_result_async()
+
+    def _result_callback(self, future):
         """Generic Action Result callback"""
         result = future.result().result
         self.get_logger().info(f"Result: Success = {result.success}")
-        # self.get_logger().info(
-        #     f"Detect Object Action Result: Success = {result.success} \n\
-        # X = {result.position.x} \n\
-        # Y = {result.position.y} \n\
-        # Z = {result.position.z} \n\
-        # confidence = {result.confidence}"
-        # )
+
+        return result
 
 
 def main(args=None) -> None:
+    mp: MissionInterface = None
+
     try:
         # Initialize ROS Client Libraries (RCL) for Python:
         rclpy.init(args=args)
-        mp: MissionInterface = MissionInterface()
+        mp = MissionInterface()
 
         try:
             rclpy.spin(mp)
@@ -168,9 +192,7 @@ def main(args=None) -> None:
             mp.get_logger().info("Graceful exit and receipt of MissionPlan...")
 
     except KeyboardInterrupt:
-        mp.get_logger().info("Ctrl+C received - exiting...")
         sys.exit(0)
     finally:
-        mp.get_logger().info("ROS MissionInterface node shutdown...")
         if mp is not None:
             mp.destroy_node()
