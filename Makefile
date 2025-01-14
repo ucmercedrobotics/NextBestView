@@ -29,7 +29,7 @@ bash:
 	--net=nbv \
 	--privileged \
 	-p=12345:12345 \
-	-v ./:${WORKSPACE}/ \
+	-v ${CURDIR}:${WORKSPACE}/ \
 	nbv bash
 
 nbv:

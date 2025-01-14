@@ -30,9 +30,13 @@ WORKDIR /nbv
 # BEGIN kortex ros2 module compilation
 ENV KORTEX_WS=/root/workspace/ros2_kortex_ws
 RUN mkdir -p ${KORTEX_WS}/src
+# since they don't tag their own versions, we'll tag it here for them
+ENV KORTEX_WORKING_SHA=97a0e7c9a2b7970f8de5830919e2fe0d7eea3bf6
 
+# checkout and build the Dec 9th commit of this package.
 RUN cd $KORTEX_WS && \
     git clone https://github.com/Kinovarobotics/ros2_kortex.git src/ros2_kortex && \
+    cd src/ros2_kortex && git reset --hard $KORTEX_WORKING_SHA && cd ../.. && \
     vcs import src --skip-existing --input src/ros2_kortex/ros2_kortex.$ROS_DISTRO.repos && \
     vcs import src --skip-existing --input src/ros2_kortex/ros2_kortex-not-released.$ROS_DISTRO.repos && \
     vcs import src --skip-existing --input src/ros2_kortex/simulation.humble.repos && \
