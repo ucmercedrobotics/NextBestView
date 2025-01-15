@@ -1,0 +1,303 @@
+#!/usr/bin/env python3
+from typing import Tuple
+from threading import Lock
+
+import cv2
+import numpy as np
+from ultralytics import YOLO
+import rclpy
+from rclpy.node import Node
+from rclpy.action import ActionServer
+from message_filters import ApproximateTimeSynchronizer, Subscriber
+from sensor_msgs.msg import Image
+
+from kinova_action_interfaces.action import DetectObject
+
+
+METER_TO_MILLIMETER: float = 1000.0
+
+
+class ObjectDetectionNode(Node):
+    def __init__(self):
+        super().__init__("object_detection_node")
+
+        self.debug: bool = True
+
+        # Load YOLO model
+        self.model: YOLO = YOLO("yolo11n.pt")
+
+        # Create action server
+        self._action_server = ActionServer(
+            self,
+            DetectObject,
+            "detect_object",
+            self.detect_object_callback,
+        )
+
+        # Latest synchronized images storage with thread safety
+        self.latest_frames = None
+        self.frames_lock = Lock()
+
+        self._color_sub = Subscriber(self, Image, "/camera/color/image_raw")
+        self._depth_sub = Subscriber(self, Image, "/camera/depth/image_raw")
+        self._time_sync = ApproximateTimeSynchronizer(
+            [
+                self._color_sub,
+                self._depth_sub,
+            ],  # Synchronized subscribers
+            30,
+            0.5,  # defines the delay (in seconds) with which messages can be synchronized
+        )
+        self._time_sync.registerCallback(self.sync_callback)
+
+        self.get_logger().info("Object Detection Node has been started")
+
+    def sync_callback(self, color: Image, depth: Image):
+        """Callback for synchronized BGR and depth images"""
+        try:
+            # Convert ROS Image messages to OpenCV format
+            bgr_image = self._imgmsg_to_cv2(color, desired_encoding="bgr8")
+            depth_image = self._imgmsg_to_cv2(depth, desired_encoding="16UC1")
+
+            # Store synchronized frames with thread safety
+            with self.frames_lock:
+                self.latest_frames = {
+                    "bgr": bgr_image,
+                    "depth": depth_image,
+                }
+
+        except Exception as e:
+            self.get_logger().error(f"Error processing synchronized frames: {str(e)}")
+
+    async def detect_object_callback(self, goal_handle):
+        """Action server callback to process detection requests"""
+        self.get_logger().info("Received detection request")
+
+        # create DetectObject action type messages
+        feedback_msg: DetectObject.Feedback = DetectObject.Feedback()
+        result: DetectObject.Result = DetectObject.Result()
+
+        # Get the target class from the goal
+        target_class: str = goal_handle.request.target_class
+        # TODO: add colors here
+
+        # Get latest synchronized frames with thread safety
+        with self.frames_lock:
+            if self.latest_frames is None:
+                raise RuntimeError("No synchronized frame data available")
+            frames = self.latest_frames.copy()
+
+        try:
+            detections = self._yolo_object_detection(frames, target_class)
+
+            # Sort detections by confidence
+            detections.sort(key=lambda x: x["confidence"], reverse=True)
+
+            if detections:
+                best_detection = detections[0]
+
+                X, Y, Z = self._compute_3d_position(best_detection)
+
+                # Set result
+                result.success = True
+                result.position.x = float(X)
+                result.position.y = float(Y)
+                result.position.z = float(Z)
+                result.confidence = best_detection["confidence"]
+
+                # Send feedback
+                feedback_msg.processing_status = (
+                    f"Object detected at ({X:.2f}, {Y:.2f}, {Z:.2f}) "
+                    f"with confidence: {result.confidence:.2f}"
+                )
+                goal_handle.publish_feedback(feedback_msg)
+
+            else:
+                result.success = False
+                result.confidence = 0.0
+                feedback_msg.processing_status = f"No {target_class} found in image"
+                goal_handle.publish_feedback(feedback_msg)
+
+            goal_handle.succeed()
+
+            if self.debug == True:  # Print debug images
+                annotated_image = self._draw_detections(
+                    frames["bgr"].copy(), detections, target_class
+                )
+                cv2.imwrite(f"{target_class}_detected.jpg", annotated_image)
+
+        except Exception as e:
+            self.get_logger().error(f"Detection failed: {str(e)}")
+            result.success = False
+            result.confidence = 0.0
+            goal_handle.succeed()
+
+        return result
+
+    def _yolo_object_detection(self, frames, target_class) -> list[dict]:
+        # Run YOLOv11 detection on BGR image
+        results = self.model(frames["bgr"])
+
+        # Get image dimensions
+        bgr_h, bgr_w = frames["bgr"].shape[:2]
+        depth_h, depth_w = frames["depth"].shape[:2]
+
+        # Calculate scaling factors
+        scale_x = depth_w / bgr_w
+        scale_y = depth_h / bgr_h
+
+        # Get detections for requested object class
+        detections = []
+
+        # iterate through all object results
+        for r in results:
+            boxes = r.boxes
+            for box in boxes:
+                cls = int(box.cls[0])
+                cls_name = self.model.names[cls]
+
+                # if one of the objects is what you were looking for
+                if target_class.lower() in cls_name.lower():
+                    conf = float(box.conf[0])
+                    # bounding box (bgr)
+                    x1, y1, x2, y2 = box.xyxy[0].tolist()
+
+                    # Calculate center point (bgr)
+                    bgr_center_x = int((x1 + x2) / 2)
+                    bgr_center_y = int((y1 + y2) / 2)
+
+                    # Calculate center point (depth)
+                    center_x = int(bgr_center_x * scale_x)
+                    center_y = int(bgr_center_y * scale_y)
+
+                    # Ensure we're within depth image bounds (depth)
+                    center_x = min(max(0, center_x), depth_w - 1)
+                    center_y = min(max(0, center_y), depth_h - 1)
+
+                    # Get depth at center point (convert to meters)
+                    depth = (
+                        float(np.average(frames["depth"][center_y, center_x]))
+                        / METER_TO_MILLIMETER
+                    )
+                    self.get_logger().info(
+                        f"{target_class} object detected at depth of {depth}m"
+                    )
+
+                    detections.append(
+                        {
+                            "confidence": conf,
+                            "bbox": [x1, y1, x2, y2],
+                            "center": [bgr_center_x, bgr_center_y],
+                            "depth": depth,
+                            "depth_center": [center_x, center_y],
+                        }
+                    )
+
+        return detections
+
+    def _compute_3d_position(self, object) -> Tuple[float, float, float]:
+        # Calculate 3D position
+        # TODO: move these into some configuration for the camera or parse them from the /camera_info topic
+        fx = 360.01333
+        fy = 360.01333
+        cx = 243.87228
+        cy = 137.9218444
+
+        # this represents the object's left-right position (left is negative, right is positive).
+        X = (object["depth_center"][0] - cx) * object["depth"] / fx
+        # this represents the object's up-down position (up is negative, down is positive).
+        Y = (object["depth_center"][1] - cy) * object["depth"] / fy
+        # depth
+        Z = object["depth"]
+
+        return X, Y, Z
+
+    def _draw_detections(self, image, detections, target_class):
+        """Draw bounding boxes and labels on the image"""
+        image_with_boxes = image.copy()
+
+        for det in detections:
+            # Get bbox coordinates
+            x1, y1, x2, y2 = map(int, det["bbox"])
+            conf = det["confidence"]
+
+            # Draw bounding box
+            cv2.rectangle(image_with_boxes, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            # Draw label with confidence
+            label = f"{target_class}: {conf:.2f}"
+            cv2.putText(
+                image_with_boxes,
+                label,
+                (x1, y1 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 0),
+                2,
+            )
+
+            # Draw center point
+            center_x, center_y = det["center"]
+            cv2.circle(
+                image_with_boxes, (int(center_x), int(center_y)), 4, (255, 0, 0), -1
+            )
+
+            # the kinova camera natively is BGR. Convert to RGB.
+            image_with_boxes = cv2.cvtColor(image_with_boxes, cv2.COLOR_BGR2RGB)
+
+        return image_with_boxes
+
+    def _imgmsg_to_cv2(self, img_msg, desired_encoding):
+        """
+        This function is required to replace cv_bridge since it's not built with numpy 2.
+        There is an error loading the module since it isn't compatible with the pyenv.
+        Instead, we rewrite the function we use from that library to get rid of it until they fix.
+        NOTE: I'm not sure if this actually does what it's supposed to do.
+
+        "bgr8" from https://robotics.stackexchange.com/questions/95630/cv-bridge-throws-boost-import-error-in-python-3-and-ros-melodic
+        "passthrough" from https://gist.github.com/Merwanski/39580a5fc276583b0921eb44dd91a61e
+        """
+        if desired_encoding == "bgr8":
+            dtype = np.dtype("uint8")  # Hardcode to 8 bits...
+            image_opencv = np.ndarray(
+                shape=(
+                    img_msg.height,
+                    img_msg.width,
+                    3,
+                ),
+                dtype=dtype,
+                buffer=img_msg.data,
+            )
+            return image_opencv
+        else:
+            # Get the image dimensions
+            height = img_msg.height
+            width = img_msg.width
+
+            # Get raw data from message
+            raw_data = np.frombuffer(img_msg.data, dtype=np.uint8)
+
+            # Since the data is 16-bit but stored in 8-bit bytes,
+            # we need to reshape and reinterpret it
+            raw_data = raw_data.reshape(-1, 2)  # Pair bytes together
+            depth_data = raw_data[:, 0].astype(np.uint16) + (
+                raw_data[:, 1].astype(np.uint16) << 8
+            )
+
+            # Reshape to 2D array with correct dimensions
+            image_opencv = depth_data.reshape(height, width)
+
+            return image_opencv
+
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    node = ObjectDetectionNode()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
