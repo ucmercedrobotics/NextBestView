@@ -1,9 +1,0 @@
-# log level
-logging: 10
-# temp file log directory -> stores mission plans
-log_directory: ".ros/.temp/"
-# schema per 1872.1-2024 + farm layout
-schema: "./src/mission_interface/resource/schema.xsd"
-# where to set the TCP server
-host: 0.0.0.0
-port: 12345
