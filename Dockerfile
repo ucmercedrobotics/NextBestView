@@ -72,3 +72,5 @@ RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
 RUN echo "source ${KORTEX_WS}/install/setup.bash" >> /root/.bashrc
 RUN echo "source ${VISION_WS}/install/setup.bash" >> /root/.bashrc
 RUN echo "source /nbv/install/setup.bash" >> /root/.bashrc
+
+CMD ["/bin/bash"]

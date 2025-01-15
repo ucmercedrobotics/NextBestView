@@ -2,9 +2,17 @@
     "python.autoComplete.extraPaths": [
       "/opt/ros/humble/lib/python3.10/site-packages",
       "/opt/ros/humble/local/lib/python3.10/dist-packages",
+      "/nbv/build/mission_interface",
+      "/nbv/build/example_nbv",
+      "/nbv/build/kinova_action_interfaces",
+      "/nbv/build/next_best_view"
     ],
     "python.analysis.extraPaths": [
       "/opt/ros/humble/lib/python3.10/site-packages",
       "/opt/ros/humble/local/lib/python3.10/dist-packages",
+      "/nbv/build/mission_interface",
+      "/nbv/build/example_nbv",
+      "/nbv/build/kinova_action_interfaces",
+      "/nbv/build/next_best_view"
     ]
   }
