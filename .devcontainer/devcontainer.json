@@ -1,0 +1,38 @@
+{
+    "name": "ROS 2 Development Container",
+    "privileged": true,
+    "remoteUser": "root",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "args": {
+            "USERNAME": "root"
+        }
+    },
+    "workspaceFolder": "/nbv",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/nbv,type=bind",
+    "customizations": {
+        "vscode": {
+            "extensions":[
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-themes",
+                "ms-iot.vscode-ros",
+                "ms-python.python",
+                "ms-python.debugpy",
+                "ms-python.vscode-pylance",
+                "ms-azuretools.vscode-docker"
+            ]
+        }
+    },
+    "containerEnv": {
+        "ROS_AUTOMATIC_DISCOVERY_RANGE": "LOCALHOST",
+        "ROS_DOMAIN_ID": "42",
+        "SHELL": "/bin/bash"
+    },
+    "runArgs": [
+        "--net=nbv",
+        "-p=12345:12345"
+    ],
+    "mounts": [
+    ],
+    "postCreateCommand": ""
+}

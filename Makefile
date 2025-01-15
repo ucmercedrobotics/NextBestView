@@ -30,7 +30,7 @@ bash:
 	--privileged \
 	-p=12345:12345 \
 	-v ${CURDIR}:${WORKSPACE}/ \
-	nbv bash
+	nbv
 
 nbv:
 	colcon build
