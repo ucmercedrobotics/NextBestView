@@ -2,7 +2,6 @@ WORKSPACE:= /nbv
 KINOVA_NIC:= en7
 
 repo-init:
-	python3 -m pip install pre-commit==3.4.0 && \
 	pre-commit install
 
 network:
@@ -33,7 +32,7 @@ bash:
 	nbv
 
 nbv:
-	colcon build
+	colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 clean:
 	rm -rf build/ install/ log/
@@ -68,7 +67,7 @@ vision:
 	ros2 launch kinova_vision kinova_vision.launch.py depth_registration:=true
 
 moveit-example:
-	ros2 run example_nbv example_nbv
+	ros2 run next_best_view hello_moveit
 
 mission-interface:
 	ros2 run mission_interface mission_interface

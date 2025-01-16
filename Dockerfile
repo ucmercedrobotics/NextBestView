@@ -66,7 +66,7 @@ RUN cd $VISION_WS && git clone https://github.com/Kinovarobotics/ros2_kortex_vis
 # build local project
 COPY . /nbv
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
-    colcon build
+    colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 # source packages
 RUN echo "source ${KORTEX_WS}/install/setup.bash" >> /root/.bashrc
