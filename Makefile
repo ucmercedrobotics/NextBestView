@@ -35,7 +35,7 @@ nbv:
 	colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 clean:
-	rm -rf build/ install/ log/
+	rm -rf build/* install/* log/* build/.* install/.* log/.*
 
 gazebo:
 	ros2 launch kortex_bringup kortex_sim_control.launch.py \

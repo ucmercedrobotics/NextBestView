@@ -17,14 +17,9 @@ find_package(std_msgs REQUIRED)
 find_package(kinova_action_interfaces REQUIRED)
 
 add_executable(hello_moveit src/hello_moveit.cpp)
-add_executable(state_publisher src/state_publisher.cpp)
 add_executable(moveto src/moveto.cpp)
 
 target_include_directories(hello_moveit PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-
-target_include_directories(state_publisher PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
@@ -35,13 +30,6 @@ target_include_directories(moveto PUBLIC
 target_compile_features(hello_moveit PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
   hello_moveit
-  "moveit_ros_planning_interface"
-  "rclcpp"
-)
-
-target_compile_features(state_publisher PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
-ament_target_dependencies(
-  state_publisher
   "moveit_ros_planning_interface"
   "rclcpp"
 )
@@ -59,9 +47,6 @@ ament_target_dependencies(
 )
 
 install(TARGETS hello_moveit
-  DESTINATION lib/${PROJECT_NAME})
-
-install(TARGETS state_publisher
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS moveto

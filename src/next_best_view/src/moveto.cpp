@@ -5,8 +5,8 @@ MoveToNode::MoveToNode()
 {
   // Create the action server
   action_server_ = rclcpp_action::create_server<MoveTo>(
-      this,              // Node pointer
-      "move_to_action",  // Action name
+      this,                              // Node pointer
+      "/next_best_view/move_to_action",  // Action name
       std::bind(&MoveToNode::handle_goal, this, std::placeholders::_1,
                 std::placeholders::_2),  // Goal handler
       std::bind(&MoveToNode::handle_cancel, this,

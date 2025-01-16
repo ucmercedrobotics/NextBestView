@@ -23,6 +23,7 @@ class MoveToNode : public rclcpp::Node {
   // Declare the action server and MoveGroupInterface as shared pointers
   rclcpp_action::Server<MoveTo>::SharedPtr action_server_;
 
+  // START MoveTo action server functionality
   // Handle incoming goal requests
   rclcpp_action::GoalResponse handle_goal(
       const rclcpp_action::GoalUUID &uuid,        // Goal ID (not used here)
@@ -41,4 +42,5 @@ class MoveToNode : public rclcpp::Node {
   // Send feedback to the client
   void send_feedback(const std::shared_ptr<GoalHandleMoveTo> goal_handle,
                      const std::string &feedback_msg);
+  // END MoveTo action server functionality
 };
