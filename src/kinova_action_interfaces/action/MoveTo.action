@@ -1,0 +1,13 @@
+# Request
+# MoveTo position or MoveTo object position detected with camera
+string task 
+geometry_msgs/Pose pose
+
+---
+# Result
+# Position is reachable or not
+string result 
+
+---
+# Feedback
+string processing_status 

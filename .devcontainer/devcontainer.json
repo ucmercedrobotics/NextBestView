@@ -9,17 +9,13 @@
         }
     },
     "workspaceFolder": "/nbv",
-    "workspaceMount": "source=${localWorkspaceFolder},target=/nbv,type=bind",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/nbv,type=bind,consistency=cached",
     "customizations": {
         "vscode": {
             "extensions":[
-                "ms-vscode.cpptools",
-                "ms-vscode.cpptools-themes",
+                "ms-vscode.cpptools-extension-pack",
                 "ms-iot.vscode-ros",
-                "ms-python.python",
-                "ms-python.debugpy",
-                "ms-python.vscode-pylance",
-                "ms-azuretools.vscode-docker"
+                "donjayamanne.python-extension-pack"
             ]
         }
     },
@@ -30,9 +26,12 @@
     },
     "runArgs": [
         "--net=nbv",
-        "-p=12345:12345"
+        "-p=12345:12345",
+        "-v=${localEnv:HOME}/.ssh:/root/.ssh"
     ],
     "mounts": [
-    ],
-    "postCreateCommand": ""
+        "source=${localWorkspaceFolderBasename}-build,target=${containerWorkspaceFolder}/build,type=volume",
+        "source=${localWorkspaceFolderBasename}-install,target=${containerWorkspaceFolder}/install,type=volume",
+        "source=${localWorkspaceFolderBasename}-log,target=${containerWorkspaceFolder}/log,type=volume"
+    ]
 }

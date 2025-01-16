@@ -10,6 +10,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   ament_cmake
   sensor_msgs
   geometry_msgs
+  std_msgs
 )
 
 foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
@@ -22,8 +23,11 @@ endforeach()
 find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/DetectObject.action"
+  "action/MoveTo.action"
   DEPENDENCIES sensor_msgs geometry_msgs
 )
+
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

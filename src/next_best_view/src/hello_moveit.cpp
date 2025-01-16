@@ -20,13 +20,13 @@ int main(int argc, char* argv[])
   // Set a target Pose
   auto const target_pose = [] {
     geometry_msgs::msg::Pose msg;
-    msg.orientation.w = 0.5; // Neutral orientation
+    msg.orientation.w = 1.0; // Neutral orientation
     msg.orientation.x = 0.5;
     msg.orientation.y = 0.5;
     msg.orientation.z = 0.5;
-    msg.position.x = 0.42;    // Example reachable position in meters
-    msg.position.y = -0.15;
-    msg.position.z = 0.51;
+    msg.position.x = 0.5;    // Example reachable position in meters
+    msg.position.y = 0.5;
+    msg.position.z = 0.5;
     return msg;
   }();
   move_group_interface.setPoseTarget(target_pose);

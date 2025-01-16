@@ -10,3 +10,5 @@ lxml-stubs==0.5.1
 catkin_pkg==1.0.0
 empy==3.3.4
 lark==1.2.2
+# git
+pre-commit==3.4.0
