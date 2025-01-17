@@ -64,12 +64,13 @@ void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
 
   if (strncmp(goal->movement_link.c_str(), goal->END_EFFECTOR_LINK.c_str(),
               strlen(goal->END_EFFECTOR_LINK.c_str())) == 0) {
-    // empty arg defaults to "end_effector_link"
     // TODO: add support for orientation updating as well, right now only
     // (x,y,z)
-    efl_pose.pose.position.x += goal->pose.position.x;
-    efl_pose.pose.position.y += goal->pose.position.y;
-    efl_pose.pose.position.z += goal->pose.position.z;
+    // TODO: add support for dynamic tf values
+    // efl_pose.pose.position.x += goal->pose.position.x;
+    // efl_pose.pose.position.y += goal->pose.position.y;
+    // efl_pose.pose.position.z += goal->pose.position.z;
+    ;
   } else if (strncmp(goal->movement_link.c_str(), goal->BASE_LINK.c_str(),
                      strlen(goal->BASE_LINK.c_str())) == 0) {
     // we actually move with respect to the end effector, but it's without
@@ -93,6 +94,7 @@ void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
                 camera_pose.pose.orientation.z, camera_pose.pose.orientation.w);
     // TODO: add support for orientation updating as well, right now only
     // (x,y,z)
+    // TODO: add support for dynamic tf values
     // efl_pose.pose.position.x -= (X_TF_STATIC_CAMERA_LINK +
     // goal->pose.position.x); efl_pose.pose.position.y -=
     // (Y_TF_STATIC_CAMERA_LINK + goal->pose.position.y);
