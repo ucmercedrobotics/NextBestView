@@ -28,7 +28,7 @@ rclcpp_action::GoalResponse MoveToNode::handle_goal(
 {
   (void)uuid;
   RCLCPP_INFO(this->get_logger(), "Received goal request: %s",
-              goal->task.c_str());
+              goal->task_name.c_str());
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;  // Accept the goal
 }
 
@@ -50,25 +50,79 @@ void MoveToNode::handle_accepted(
 // Execute the goal
 void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
   auto goal = goal_handle->get_goal();               // Get the goal message
-  move_group_interface_->setPoseTarget(goal->pose);  // Set the target pose
+  auto result = std::make_shared<MoveTo::Result>();  // Create a result message
+
+  geometry_msgs::msg::PoseStamped pose;
+  std::string movement_link = goal->movement_link;
+
+  if (strncmp(goal->movement_link.c_str(), goal->END_EFFECTOR_LINK.c_str(),
+              strlen(goal->END_EFFECTOR_LINK.c_str())) == 0) {
+    // empty arg defaults to "end_effector_link"
+    pose = move_group_interface_->getCurrentPose();
+    RCLCPP_INFO(this->get_logger(), "Current pose: %f, %f, %f",
+                pose.pose.position.x, pose.pose.position.y,
+                pose.pose.position.z);
+    RCLCPP_INFO(this->get_logger(), "Current orientation: %f, %f, %f, %f",
+                pose.pose.orientation.x, pose.pose.orientation.y,
+                pose.pose.orientation.z, pose.pose.orientation.w);
+    // TODO: add support for orientation updating as well, right now only
+    // (x,y,z)
+    pose.pose.position.x += goal->pose.position.x;
+    pose.pose.position.y += goal->pose.position.y;
+    pose.pose.position.z += goal->pose.position.z;
+  } else if (strncmp(goal->movement_link.c_str(), goal->BASE_LINK.c_str(),
+                     strlen(goal->BASE_LINK.c_str())) == 0) {
+    pose = move_group_interface_->getCurrentPose();
+    RCLCPP_INFO(this->get_logger(), "Current pose: %f, %f, %f",
+                pose.pose.position.x, pose.pose.position.y,
+                pose.pose.position.z);
+    RCLCPP_INFO(this->get_logger(), "Current orientation: %f, %f, %f, %f",
+                pose.pose.orientation.x, pose.pose.orientation.y,
+                pose.pose.orientation.z, pose.pose.orientation.w);
+    // we actually move with respect to the end effector, but it's without
+    // current position computation
+    pose.pose.position = goal->pose.position;
+    pose.pose.orientation = goal->pose.orientation;
+    movement_link = goal->END_EFFECTOR_LINK;
+  } else if (strncmp(goal->movement_link.c_str(), goal->CAMERA_LINK.c_str(),
+                     strlen(goal->CAMERA_LINK.c_str())) == 0) {
+    // we don't do anything here since it's already absolute movement by default
+    pose = move_group_interface_->getCurrentPose(goal->CAMERA_LINK);
+    RCLCPP_INFO(this->get_logger(), "Current pose: %f, %f, %f",
+                pose.pose.position.x, pose.pose.position.y,
+                pose.pose.position.z);
+    RCLCPP_INFO(this->get_logger(), "Current orientation: %f, %f, %f, %f",
+                pose.pose.orientation.x, pose.pose.orientation.y,
+                pose.pose.orientation.z, pose.pose.orientation.w);
+    // TODO: add support for orientation updating as well, right now only
+    // (x,y,z)
+    pose.pose.position.x += goal->pose.position.x;
+    pose.pose.position.y += goal->pose.position.y;
+    pose.pose.position.z += goal->pose.position.z;
+  } else {
+    RCLCPP_ERROR(this->get_logger(),
+                 "Bad link requested for movement: %s. Expected: %s, %s, %s",
+                 goal->movement_link.c_str(), goal->END_EFFECTOR_LINK.c_str(),
+                 goal->BASE_LINK.c_str(), goal->CAMERA_LINK.c_str());
+    send_feedback(goal_handle, "FAILED");
+    return;
+  }
+
+  move_group_interface_->setPoseTarget(pose,
+                                       movement_link);  // Set the target pose
 
   // Plan the movement to the target pose
   moveit::planning_interface::MoveGroupInterface::Plan plan;
   bool success = (move_group_interface_->plan(plan) ==
                   moveit::core::MoveItErrorCode::SUCCESS);
 
-  auto result = std::make_shared<MoveTo::Result>();  // Create a result message
-
   if (success) {
-    move_group_interface_->execute(plan);  // Execute the planned movement
-    result->result = "Pose is reachable";
+    move_group_interface_->execute(plan);   // Execute the planned movement
     send_feedback(goal_handle, "SUCCESS");  // Send success feedback
+    goal_handle->succeed(result);           // Mark the goal as succeeded
   } else {
-    result->result = "Pose is not reachable";
     send_feedback(goal_handle, "FAILED");  // Send failure feedback
   }
-
-  goal_handle->succeed(result);  // Mark the goal as succeeded
 }
 
 // Send feedback to the client
