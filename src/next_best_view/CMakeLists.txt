@@ -14,6 +14,7 @@ find_package(ament_cmake_python REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(tf2 REQUIRED)
 find_package(kinova_action_interfaces REQUIRED)
 
 add_executable(hello_moveit src/hello_moveit.cpp)

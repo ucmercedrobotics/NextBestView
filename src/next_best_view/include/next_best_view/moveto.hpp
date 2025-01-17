@@ -1,4 +1,6 @@
 #include <moveit/move_group_interface/move_group_interface.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 #include <geometry_msgs/msg/pose.hpp>
 #include <memory>
@@ -6,6 +8,8 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 
 #include "kinova_action_interfaces/action/move_to.hpp"  // Change to the correct action file path
+
+#define OBJECT_KEEP_DISTANCE 0.75
 
 // Define the action type and goal handle type
 using MoveTo = kinova_action_interfaces::action::MoveTo;
@@ -22,11 +26,13 @@ class MoveToNode : public rclcpp::Node {
  private:
   // Declare the action server and MoveGroupInterface as shared pointers
   rclcpp_action::Server<MoveTo>::SharedPtr action_server_;
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
   // START MoveTo action server functionality
   // Handle incoming goal requests
   rclcpp_action::GoalResponse handle_goal(
-      const rclcpp_action::GoalUUID &uuid,        // Goal ID (not used here)
+      const rclcpp_action::GoalUUID& uuid,        // Goal ID (not used here)
       std::shared_ptr<const MoveTo::Goal> goal);  // Goal message
 
   // Handle cancel requests
@@ -41,6 +47,10 @@ class MoveToNode : public rclcpp::Node {
 
   // Send feedback to the client
   void send_feedback(const std::shared_ptr<GoalHandleMoveTo> goal_handle,
-                     const std::string &feedback_msg);
+                     const std::string& feedback_msg);
   // END MoveTo action server functionality
+  // helper quaternion conversion
+  geometry_msgs::msg::Pose compute_relative_goal_pose(
+      const geometry_msgs::msg::Pose& current_pose,
+      const geometry_msgs::msg::Pose& goal_pose);
 };

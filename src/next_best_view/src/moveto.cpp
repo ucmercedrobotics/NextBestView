@@ -1,5 +1,11 @@
 #include "next_best_view/moveto.hpp"
 
+#include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Transform.h>
+
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
 MoveToNode::MoveToNode()
     : Node("move_to_action_server")  // Initialize the node
 {
@@ -19,6 +25,9 @@ MoveToNode::MoveToNode()
   move_group_interface_ =
       std::make_shared<moveit::planning_interface::MoveGroupInterface>(
           std::shared_ptr<MoveToNode>(this), "manipulator");
+
+  tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 }
 
 // Handle incoming goal requests
@@ -28,7 +37,7 @@ rclcpp_action::GoalResponse MoveToNode::handle_goal(
 {
   (void)uuid;
   RCLCPP_INFO(this->get_logger(), "Received goal request: %s",
-              goal->task.c_str());
+              goal->task_name.c_str());
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;  // Accept the goal
 }
 
@@ -50,25 +59,104 @@ void MoveToNode::handle_accepted(
 // Execute the goal
 void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
   auto goal = goal_handle->get_goal();               // Get the goal message
-  move_group_interface_->setPoseTarget(goal->pose);  // Set the target pose
+  auto result = std::make_shared<MoveTo::Result>();  // Create a result message
+
+  geometry_msgs::msg::PoseStamped eel_pose =
+      move_group_interface_->getCurrentPose();
+  geometry_msgs::msg::Pose target_pose;
+
+  RCLCPP_INFO(this->get_logger(), "Current efl pose: %f, %f, %f",
+              eel_pose.pose.position.x, eel_pose.pose.position.y,
+              eel_pose.pose.position.z);
+  RCLCPP_INFO(this->get_logger(), "Current efl orientation: %f, %f, %f, %f",
+              eel_pose.pose.orientation.x, eel_pose.pose.orientation.y,
+              eel_pose.pose.orientation.z, eel_pose.pose.orientation.w);
+
+  if (strncmp(goal->movement_link.c_str(), goal->END_EFFECTOR_LINK.c_str(),
+              strlen(goal->END_EFFECTOR_LINK.c_str())) == 0) {
+    // TODO: add support for orientation updating as well, right now only
+    // (x,y,z)
+    target_pose = compute_relative_goal_pose(eel_pose.pose, goal->pose);
+
+  } else if (strncmp(goal->movement_link.c_str(), goal->BASE_LINK.c_str(),
+                     strlen(goal->BASE_LINK.c_str())) == 0) {
+    // we move with respect to the base_link world
+    // no transformation required as it expects input is with respect to base
+    // link
+    eel_pose.pose.position = goal->pose.position;
+    eel_pose.pose.orientation = goal->pose.orientation;
+  } else if (strncmp(goal->movement_link.c_str(), goal->CAMERA_LINK.c_str(),
+                     strlen(goal->CAMERA_LINK.c_str())) == 0) {
+    // NOTE: I THINK THIS WORKS BUT I DONT KNOW THE 3D POSE FRAME OF YOLO
+    // YOU CAN ADD THE STATIC TF + THE 180
+    // I DONT KNOW IF 180 IS INCLUDED IN THAT TF, IT SHOULD BE?
+    // IF SO REMOVE PART ADDING 180 ADJUSTMENT. I CANT PLAY AROUND WITH THE
+    // MACHINE RIGHT NOW REQUIRES TESTING TOMORROW
+
+    // // Get end effector link to camera link transform (note the reversed
+    // order) geometry_msgs::msg::TransformStamped ee_to_camera_transform; try {
+    //     ee_to_camera_transform =
+    //     tf_buffer_->lookupTransform(goal->CAMERA_LINK,
+    //     goal->END_EFFECTOR_LINK, tf2::TimePointZero);
+    // } catch (tf2::TransformException &ex) {
+    //     RCLCPP_ERROR(this->get_logger(), "Transform error: %s", ex.what());
+    //     return;
+    // }
+
+    // // If needed, apply the Z-axis rotation adjustment
+    // tf2::Quaternion adjust_rotation;
+    // adjust_rotation.setRPY(0, 0, M_PI); // 180-degree rotation around Z-axis
+    // tf2::Transform adjustment(tf2::Matrix3x3(adjust_rotation),
+    // tf2::Vector3(0, 0, 0));
+
+    // // Convert ee_to_camera_transform to tf2::Transform
+    // tf2::Transform ee_to_camera_tf2;
+    // tf2::fromMsg(ee_to_camera_transform.transform, ee_to_camera_tf2);
+
+    // // Apply adjustment if needed
+    // ee_to_camera_tf2 = ee_to_camera_tf2 * adjustment;
+    // ee_to_camera_transform.transform = tf2::toMsg(ee_to_camera_tf2);
+
+    // // Transform goal pose from camera frame to end effector frame
+    // geometry_msgs::msg::PoseStamped camera_goal;
+    // camera_goal.header.frame_id = goal->CAMERA_LINK;
+    // camera_goal.pose = goal->pose;
+
+    // geometry_msgs::msg::PoseStamped ee_relative_goal;
+    // tf2::doTransform(camera_goal, ee_relative_goal, ee_to_camera_transform);
+
+    // Now compute the final target pose using the relative goal
+    // target_pose = compute_relative_goal_pose(eel_pose.pose,
+    // ee_relative_goal.pose);
+
+    target_pose = compute_relative_goal_pose(eel_pose.pose, goal->pose);
+  } else {
+    RCLCPP_ERROR(this->get_logger(),
+                 "Bad link requested for movement: %s. Expected: %s, %s, %s",
+                 goal->movement_link.c_str(), goal->END_EFFECTOR_LINK.c_str(),
+                 goal->BASE_LINK.c_str(), goal->CAMERA_LINK.c_str());
+    send_feedback(goal_handle, "FAILED");
+    return;
+  }
+
+  // move to pose wrt end effector link
+  // NOTE: I tried doing this with other links as reference and it works
+  //       HOWEVER, after one movement, the error builds up and fails goal
+  //       tolerance the next move
+  move_group_interface_->setPoseTarget(target_pose);
 
   // Plan the movement to the target pose
   moveit::planning_interface::MoveGroupInterface::Plan plan;
   bool success = (move_group_interface_->plan(plan) ==
                   moveit::core::MoveItErrorCode::SUCCESS);
 
-  auto result = std::make_shared<MoveTo::Result>();  // Create a result message
-
   if (success) {
-    move_group_interface_->execute(plan);  // Execute the planned movement
-    result->result = "Pose is reachable";
+    move_group_interface_->execute(plan);   // Execute the planned movement
     send_feedback(goal_handle, "SUCCESS");  // Send success feedback
+    goal_handle->succeed(result);           // Mark the goal as succeeded
   } else {
-    result->result = "Pose is not reachable";
     send_feedback(goal_handle, "FAILED");  // Send failure feedback
   }
-
-  goal_handle->succeed(result);  // Mark the goal as succeeded
 }
 
 // Send feedback to the client
@@ -82,6 +170,42 @@ void MoveToNode::send_feedback(
   goal_handle->publish_feedback(feedback);  // Publish the feedback
   RCLCPP_INFO(this->get_logger(), "Feedback: %s",
               feedback_msg.c_str());  // Log the feedback
+}
+
+geometry_msgs::msg::Pose MoveToNode::compute_relative_goal_pose(
+    const geometry_msgs::msg::Pose &current_pose,
+    const geometry_msgs::msg::Pose &goal_pose) {
+  geometry_msgs::msg::Pose target_pose;
+  // Current orientation as a tf2::Quaternion
+  tf2::Quaternion current_orientation;
+  tf2::fromMsg(current_pose.orientation, current_orientation);
+
+  // convert goals into tf objects
+  tf2::Vector3 relative_translation(goal_pose.position.x, goal_pose.position.y,
+                                    goal_pose.position.z);
+  tf2::Quaternion relative_orientation(
+      goal_pose.orientation.x, goal_pose.orientation.y, goal_pose.orientation.z,
+      goal_pose.orientation.w);
+
+  // Combine the current orientation with the relative orientation
+  tf2::Quaternion target_orientation =
+      current_orientation * relative_orientation;
+  target_orientation.normalize();
+
+  // Transform the relative translation into the world frame
+  tf2::Matrix3x3 rotation_matrix(current_orientation);
+  tf2::Vector3 transformed_translation = rotation_matrix * relative_translation;
+
+  // Compute the target pose
+  target_pose.position.x =
+      current_pose.position.x + transformed_translation.x();
+  target_pose.position.y =
+      current_pose.position.y + transformed_translation.y();
+  target_pose.position.z =
+      current_pose.position.z + transformed_translation.z();
+  target_pose.orientation = tf2::toMsg(target_orientation);
+
+  return target_pose;
 }
 
 int main(int argc, char **argv) {
