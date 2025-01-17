@@ -52,64 +52,62 @@ void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
   auto goal = goal_handle->get_goal();               // Get the goal message
   auto result = std::make_shared<MoveTo::Result>();  // Create a result message
 
-  geometry_msgs::msg::PoseStamped pose;
-  std::string movement_link = goal->movement_link;
+  geometry_msgs::msg::PoseStamped efl_pose =
+      move_group_interface_->getCurrentPose();
+
+  RCLCPP_INFO(this->get_logger(), "Current efl pose: %f, %f, %f",
+              efl_pose.pose.position.x, efl_pose.pose.position.y,
+              efl_pose.pose.position.z);
+  RCLCPP_INFO(this->get_logger(), "Current efl orientation: %f, %f, %f, %f",
+              efl_pose.pose.orientation.x, efl_pose.pose.orientation.y,
+              efl_pose.pose.orientation.z, efl_pose.pose.orientation.w);
 
   if (strncmp(goal->movement_link.c_str(), goal->END_EFFECTOR_LINK.c_str(),
               strlen(goal->END_EFFECTOR_LINK.c_str())) == 0) {
     // empty arg defaults to "end_effector_link"
-    pose = move_group_interface_->getCurrentPose();
-    RCLCPP_INFO(this->get_logger(), "Current pose: %f, %f, %f",
-                pose.pose.position.x, pose.pose.position.y,
-                pose.pose.position.z);
-    RCLCPP_INFO(this->get_logger(), "Current orientation: %f, %f, %f, %f",
-                pose.pose.orientation.x, pose.pose.orientation.y,
-                pose.pose.orientation.z, pose.pose.orientation.w);
     // TODO: add support for orientation updating as well, right now only
     // (x,y,z)
-    pose.pose.position.x += goal->pose.position.x;
-    pose.pose.position.y += goal->pose.position.y;
-    pose.pose.position.z += goal->pose.position.z;
+    efl_pose.pose.position.x += goal->pose.position.x;
+    efl_pose.pose.position.y += goal->pose.position.y;
+    efl_pose.pose.position.z += goal->pose.position.z;
   } else if (strncmp(goal->movement_link.c_str(), goal->BASE_LINK.c_str(),
                      strlen(goal->BASE_LINK.c_str())) == 0) {
-    pose = move_group_interface_->getCurrentPose();
-    RCLCPP_INFO(this->get_logger(), "Current pose: %f, %f, %f",
-                pose.pose.position.x, pose.pose.position.y,
-                pose.pose.position.z);
-    RCLCPP_INFO(this->get_logger(), "Current orientation: %f, %f, %f, %f",
-                pose.pose.orientation.x, pose.pose.orientation.y,
-                pose.pose.orientation.z, pose.pose.orientation.w);
     // we actually move with respect to the end effector, but it's without
     // current position computation
-    pose.pose.position = goal->pose.position;
-    pose.pose.orientation = goal->pose.orientation;
-    movement_link = goal->END_EFFECTOR_LINK;
-  } else if (strncmp(goal->movement_link.c_str(), goal->CAMERA_LINK.c_str(),
-                     strlen(goal->CAMERA_LINK.c_str())) == 0) {
+    efl_pose.pose.position = goal->pose.position;
+    efl_pose.pose.orientation = goal->pose.orientation;
+  } else if (strncmp(goal->movement_link.c_str(),
+                     goal->CAMERA_DEPTH_FRAME.c_str(),
+                     strlen(goal->CAMERA_DEPTH_FRAME.c_str())) == 0) {
+    // TODO: we don't do anything with this right now BUT we need to figure out
+    // how to determine
+    geometry_msgs::msg::PoseStamped camera_pose =
+        move_group_interface_->getCurrentPose(goal->CAMERA_DEPTH_FRAME);
     // we don't do anything here since it's already absolute movement by default
-    pose = move_group_interface_->getCurrentPose(goal->CAMERA_LINK);
-    RCLCPP_INFO(this->get_logger(), "Current pose: %f, %f, %f",
-                pose.pose.position.x, pose.pose.position.y,
-                pose.pose.position.z);
-    RCLCPP_INFO(this->get_logger(), "Current orientation: %f, %f, %f, %f",
-                pose.pose.orientation.x, pose.pose.orientation.y,
-                pose.pose.orientation.z, pose.pose.orientation.w);
+    RCLCPP_INFO(this->get_logger(), "Current camera pose: %f, %f, %f",
+                camera_pose.pose.position.x, camera_pose.pose.position.y,
+                camera_pose.pose.position.z);
+    RCLCPP_INFO(this->get_logger(),
+                "Current camera orientation: %f, %f, %f, %f",
+                camera_pose.pose.orientation.x, camera_pose.pose.orientation.y,
+                camera_pose.pose.orientation.z, camera_pose.pose.orientation.w);
     // TODO: add support for orientation updating as well, right now only
     // (x,y,z)
-    pose.pose.position.x += goal->pose.position.x;
-    pose.pose.position.y += goal->pose.position.y;
-    pose.pose.position.z += goal->pose.position.z;
+    // efl_pose.pose.position.x -= (X_TF_STATIC_CAMERA_LINK +
+    // goal->pose.position.x); efl_pose.pose.position.y -=
+    // (Y_TF_STATIC_CAMERA_LINK + goal->pose.position.y);
+    // efl_pose.pose.position.z += (goal->pose.position.z -
+    // OBJECT_KEEP_DISTANCE);
   } else {
     RCLCPP_ERROR(this->get_logger(),
                  "Bad link requested for movement: %s. Expected: %s, %s, %s",
                  goal->movement_link.c_str(), goal->END_EFFECTOR_LINK.c_str(),
-                 goal->BASE_LINK.c_str(), goal->CAMERA_LINK.c_str());
+                 goal->BASE_LINK.c_str(), goal->CAMERA_DEPTH_FRAME.c_str());
     send_feedback(goal_handle, "FAILED");
     return;
   }
 
-  move_group_interface_->setPoseTarget(pose,
-                                       movement_link);  // Set the target pose
+  move_group_interface_->setPoseTarget(efl_pose);  // Set the target pose
 
   // Plan the movement to the target pose
   moveit::planning_interface::MoveGroupInterface::Plan plan;

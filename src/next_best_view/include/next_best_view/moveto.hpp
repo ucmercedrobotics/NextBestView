@@ -7,6 +7,8 @@
 
 #include "kinova_action_interfaces/action/move_to.hpp"  // Change to the correct action file path
 
+#define OBJECT_KEEP_DISTANCE 0.75
+
 // Define the action type and goal handle type
 using MoveTo = kinova_action_interfaces::action::MoveTo;
 using GoalHandleMoveTo = rclcpp_action::ServerGoalHandle<MoveTo>;
