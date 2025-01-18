@@ -73,4 +73,4 @@ mission-interface:
 	ros2 run mission_interface mission_interface
 
 detect-object:
-	ros2 run next_best_view object_detection
+	ros2 run next_best_view object_detection.py
