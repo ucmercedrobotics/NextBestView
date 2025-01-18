@@ -13,6 +13,10 @@ from sensor_msgs.msg import Image
 
 from kinova_action_interfaces.action import DetectObject
 
+from geometry_msgs.msg import PointStamped
+import tf2_ros
+from tf2_geometry_msgs import do_transform_point
+
 
 METER_TO_MILLIMETER: float = 1000.0
 
@@ -50,6 +54,10 @@ class ObjectDetectionNode(Node):
         )
         self._time_sync.registerCallback(self.sync_callback)
 
+        # Initialize tf2 buffer and listener
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+
         self.get_logger().info("Object Detection Node has been started")
 
     def sync_callback(self, color: Image, depth: Image):
@@ -79,6 +87,7 @@ class ObjectDetectionNode(Node):
 
         # Get the target class from the goal
         target_class: str = goal_handle.request.target_class
+        target_view_point_distance: str = goal_handle.request.target_view_point_distance
         # TODO: add colors here
 
         # Get latest synchronized frames with thread safety
@@ -98,19 +107,71 @@ class ObjectDetectionNode(Node):
 
                 X, Y, Z = self._compute_3d_position(best_detection)
 
+                # Transform the object position from camera_link to base_link
+                object_in_camera_frame = PointStamped()
+                # object_in_camera_frame.header.frame_id = "camera_link"
+                object_in_camera_frame.point.x = X
+                object_in_camera_frame.point.y = Y
+                object_in_camera_frame.point.z = Z
+
+                object_view_point = PointStamped()
+                # object_view_point.header.frame_id = "object_view_point"
+                object_view_point.point.x = X
+                object_view_point.point.y = Y
+                object_view_point.point.z = Z - target_view_point_distance
+
+                try:
+                    transform = self.tf_buffer.lookup_transform(
+                        "base_link", "camera_link", rclpy.time.Time()
+                    )
+                    object_in_base_frame = do_transform_point(
+                        object_in_camera_frame, transform
+                    )
+
+                    result.position.x = object_in_base_frame.point.x
+                    result.position.y = object_in_base_frame.point.y
+                    result.position.z = object_in_base_frame.point.z
+
+                    object_view_point_in_base_frame = do_transform_point(
+                        object_view_point, transform
+                    )
+
+                    result.view_position.x = object_view_point_in_base_frame.point.x
+                    result.view_position.y = object_view_point_in_base_frame.point.y
+                    result.view_position.z = object_view_point_in_base_frame.point.z
+
+                    result.confidence = best_detection["confidence"]
+                    result.success = True
+
+                    feedback_msg.processing_status = (
+                        f"Object detected at base_link coordinates "
+                        f"({result.position.x:.2f}, {result.position.y:.2f}, {result.position.z:.2f}) "
+                        f"({result.view_position.x:.2f}, {result.view_position.y:.2f}, {result.view_position.z:.2f}) "
+                        f"with confidence: {result.confidence:.2f}"
+                    )
+                    goal_handle.publish_feedback(feedback_msg)
+                except Exception as e:
+                    self.get_logger().error(f"TF Transform failed: {str(e)}")
+                    result.success = False
+                    result.confidence = 0.0
+                    feedback_msg.processing_status = (
+                        "Failed to transform object position to base_link"
+                    )
+                    goal_handle.publish_feedback(feedback_msg)
+
                 # Set result
-                result.success = True
-                result.position.x = float(X)
-                result.position.y = float(Y)
-                result.position.z = float(Z)
-                result.confidence = best_detection["confidence"]
+                # result.success = True
+                # result.position.x = float(X)
+                # result.position.y = float(Y)
+                # result.position.z = float(Z)
+                # result.confidence = best_detection["confidence"]
 
                 # Send feedback
-                feedback_msg.processing_status = (
-                    f"Object detected at ({X:.2f}, {Y:.2f}, {Z:.2f}) "
-                    f"with confidence: {result.confidence:.2f}"
-                )
-                goal_handle.publish_feedback(feedback_msg)
+                # feedback_msg.processing_status = (
+                #    f"Object detected at ({X:.2f}, {Y:.2f}, {Z:.2f}) "
+                #    f"with confidence: {result.confidence:.2f}"
+                # )
+                # goal_handle.publish_feedback(feedback_msg)
 
             else:
                 result.success = False

@@ -1,14 +1,15 @@
-#include <memory>
-
-#include <rclcpp/rclcpp.hpp>
 #include <moveit/move_group_interface/move_group_interface.h>
 
-int main(int argc, char* argv[])
-{
+#include <memory>
+#include <rclcpp/rclcpp.hpp>
+
+int main(int argc, char* argv[]) {
   // Initialize ROS and create the Node
   rclcpp::init(argc, argv);
   auto const node = std::make_shared<rclcpp::Node>(
-      "hello_moveit", rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
+      "hello_moveit",
+      rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(
+          true));
 
   // Create a ROS logger
   auto const logger = rclcpp::get_logger("hello_moveit");
@@ -20,13 +21,13 @@ int main(int argc, char* argv[])
   // Set a target Pose
   auto const target_pose = [] {
     geometry_msgs::msg::Pose msg;
-    msg.orientation.w = 1.0; // Neutral orientation
-    msg.orientation.x = 0.5;
-    msg.orientation.y = 0.5;
-    msg.orientation.z = 0.5;
-    msg.position.x = 0.5;    // Example reachable position in meters
-    msg.position.y = 0.5;
-    msg.position.z = 0.5;
+    msg.orientation.w = 1.0;  // Neutral orientation
+    msg.orientation.x = 0.0;
+    msg.orientation.y = 0.0;
+    msg.orientation.z = 0.0;
+    msg.position.x = 0.78;  // Example reachable position in meters
+    msg.position.y = 0.36;
+    msg.position.z = 0.33;
     return msg;
   }();
   move_group_interface.setPoseTarget(target_pose);
@@ -39,12 +40,9 @@ int main(int argc, char* argv[])
   }();
 
   // Execute the plan
-  if (success)
-  {
+  if (success) {
     move_group_interface.execute(plan);
-  }
-  else
-  {
+  } else {
     RCLCPP_ERROR(logger, "Planning failed!");
   }
 
