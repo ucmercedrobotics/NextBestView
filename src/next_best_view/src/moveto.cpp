@@ -83,8 +83,8 @@ void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
     // we move with respect to the base_link world
     // no transformation required as it expects input is with respect to base
     // link
-    eel_pose.pose.position = goal->pose.position;
-    eel_pose.pose.orientation = goal->pose.orientation;
+    target_pose.position = goal->pose.position;
+    target_pose.orientation = goal->pose.orientation;
   } else if (strncmp(goal->movement_link.c_str(), goal->CAMERA_LINK.c_str(),
                      strlen(goal->CAMERA_LINK.c_str())) == 0) {
     // NOTE: I THINK THIS WORKS BUT I DONT KNOW THE 3D POSE FRAME OF YOLO
