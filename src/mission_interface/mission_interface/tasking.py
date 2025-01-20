@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
+from typing import Tuple
 from typing_extensions import Self
 from enum import Enum
+import math
 
+from geometry_msgs.msg import Pose
 from lxml import etree
 
 
@@ -69,6 +72,11 @@ class TaskResult(str, Enum):
     FALSE = "false"
 
 
+class MovementLink(str, Enum):
+    BASE_LINK = "base_link"
+    END_EFFECTOR_LINK = "end_effector_link"
+
+
 class Condition:
     def __init__(self, comparator: Comparator, value: float | str):
         self.comparator: Comparator = comparator
@@ -128,7 +136,7 @@ class ActionLeaf(TaskLeaf, ABC):
         super().__init__(name, action_type, depth, namespace)
 
     @abstractmethod
-    def _parse_xml_parameters(self, element: etree._Element) -> None:
+    def parse_xml_parameters(self, element: etree._Element) -> None:
         pass
 
 
@@ -142,12 +150,17 @@ class GoToPositionLeaf(ActionLeaf):
         action_type: ActionType,
         depth: int,
         namespace: str,
-        element: etree._Element,
+        movement_link: str,
     ):
         super().__init__(name, action_type, depth, namespace)
-        self._parse_xml_parameters(element)
 
-    def _parse_xml_parameters(self, element: etree._Element) -> None:
+        self.movement_link: str = movement_link
+        self.pose: Pose = Pose()
+
+    def set_pose(self, pose: Pose) -> None:
+        self.pose = pose
+
+    def parse_xml_parameters(self, element: etree._Element) -> None:
         # schema will validate that these exists. No need to verify
         x: float = float(element.find(self.namespace + ParameterTypes.X).text)
 
@@ -168,6 +181,48 @@ class GoToPositionLeaf(ActionLeaf):
         self.pitch: float = pitch
         self.yaw: float = yaw
 
+        self._generate_pose()
+
+    def _generate_pose(self) -> None:
+        self.pose.position.x = self.x
+        self.pose.position.y = self.y
+        self.pose.position.z = self.z
+
+        x, y, z, w = self.quaternion_from_euler(self.roll, self.pitch, self.yaw)
+        self.pose.orientation.x = x
+        self.pose.orientation.y = y
+        self.pose.orientation.z = z
+        self.pose.orientation.w = w
+
+    @staticmethod
+    def quaternion_from_euler(
+        roll: float, pitch: float, yaw
+    ) -> Tuple[float, float, float, float]:
+        # This function is a stripped down version of the code in
+        # https://github.com/matthew-brett/transforms3d/blob/f185e866ecccb66c545559bc9f2e19cb5025e0ab/transforms3d/euler.py
+        # Besides simplifying it, this version also inverts the order to return x,y,z,w, which is
+        # the way that ROS prefers it.
+        roll /= 2.0
+        pitch /= 2.0
+        yaw /= 2.0
+        ci = math.cos(roll)
+        si = math.sin(roll)
+        cj = math.cos(pitch)
+        sj = math.sin(pitch)
+        ck = math.cos(yaw)
+        sk = math.sin(yaw)
+        cc = ci * ck
+        cs = ci * sk
+        sc = si * ck
+        ss = si * sk
+
+        return (
+            cj * sc - sj * cs,
+            cj * ss + sj * cc,
+            cj * cs - sj * sc,
+            cj * cc + sj * ss,
+        )
+
     def __repr__(self) -> str:
         out: str = (
             f"name: {self.name}, actionType: {self.action_type}, x: {self.x}, y: {self.y}, z: {self.z}"
@@ -183,12 +238,10 @@ class IdentifyObjectLeaf(ActionLeaf):
         action_type: ActionType,
         depth: int,
         namespace: str,
-        element: etree._Element,
     ):
         super().__init__(name, action_type, depth, namespace)
-        self._parse_xml_parameters(element)
 
-    def _parse_xml_parameters(self, element: etree._Element) -> None:
+    def parse_xml_parameters(self, element: etree._Element) -> None:
         # schema will validate that these exists. No need to verify
         object_name: etree._Element = element.find(
             self.namespace + ParameterTypes.OBJECTNAME
@@ -222,12 +275,10 @@ class NextBestViewLeaf(ActionLeaf):
         action_type: ActionType,
         depth: int,
         namespace: str,
-        element: etree._Element,
     ):
         super().__init__(name, action_type, depth, namespace)
-        self._parse_xml_parameters(element)
 
-    def _parse_xml_parameters(self, element: etree._Element) -> None:
+    def parse_xml_parameters(self, element: etree._Element) -> None:
         # schema will validate that these exists. No need to verify
         resolution: str = element.find(self.namespace + ParameterTypes.RESOLUTION).text
 

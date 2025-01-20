@@ -4,6 +4,7 @@ from lxml import etree
 
 from .tasking import (
     TaskLeaf,
+    ActionLeaf,
     ElementTags,
     Comparator,
     Condition,
@@ -134,9 +135,10 @@ class BehaviorTree:
 
         try:
             # find from the dictionary which constructor to use
-            t = TASK_CONSTRUCTORS[action_type.text](
-                name, action_type.text, depth, self.namespace, action
+            t: ActionLeaf = TASK_CONSTRUCTORS[action_type.text](
+                name, action_type.text, depth, self.namespace
             )
+            t.parse_xml_parameters(action)
         except:
             self.logger.error(
                 f"Invalid action type {action_type.text}. No implementation found..."

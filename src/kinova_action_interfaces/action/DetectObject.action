@@ -9,7 +9,7 @@ bool success
 geometry_msgs/Point position
 float32 confidence
 #Location of the object view point
-geometry_msgs/Point view_position
+geometry_msgs/Pose view_position
 ---
 # Feedback
 string processing_status
