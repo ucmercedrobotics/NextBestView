@@ -6,7 +6,7 @@ float32 target_view_point_distance
 ---
 # Result
 bool success
-geometry_msgs/Point position
+geometry_msgs/Point object_position
 float32 confidence
 #Location of the object view point
 geometry_msgs/Pose view_position

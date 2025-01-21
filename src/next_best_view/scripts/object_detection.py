@@ -10,8 +10,9 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PointStamped, PoseStamped
+from geometry_msgs.msg import PointStamped, PoseStamped, Vector3, Quaternion
 import tf2_ros
+import tf2_geometry_msgs
 from tf2_geometry_msgs import do_transform_pose_stamped
 
 from kinova_action_interfaces.action import DetectObject
@@ -193,9 +194,9 @@ class ObjectDetectionNode(Node):
             object_in_camera_frame, transform
         )
 
-        result.position.x = object_in_base_frame.pose.position.x
-        result.position.y = object_in_base_frame.pose.position.y
-        result.position.z = object_in_base_frame.pose.position.z
+        result.object_position.x = object_in_base_frame.pose.position.x
+        result.object_position.y = object_in_base_frame.pose.position.y
+        result.object_position.z = object_in_base_frame.pose.position.z
 
         object_view_point_in_base_frame = do_transform_pose_stamped(
             object_view_point, transform
@@ -212,6 +213,49 @@ class ObjectDetectionNode(Node):
         )
 
         # TODO: set view_position orientation
+
+        direction = Vector3()
+
+        direction.x = object_in_base_frame.pose.x - object_view_point.pose.position.x;
+        direction.y = object_in_base_frame.pose.y - object_view_point.pose.position.y;
+        direction.z = object_in_base_frame.pose.z - object_view_point.pose.position.z;
+
+        # Calculate direction vector
+        direction = np.array([
+            object_in_base_frame.pose.x - object_view_point.pose.position.x,
+            object_in_base_frame.pose.y - object_view_point.pose.position.y,
+            object_in_base_frame.pose.z - object_view_point.pose.position.z
+            ])
+        
+        # Normalize the direction vector
+        norm = np.linalg.norm(direction)
+        direction_normalized = direction / norm
+
+        # For simplicity, we'll align the z-axis of the end effector with the target point direction
+        quaternion = tf2_ros.QuaternionStamped()
+        rotation_matrix = tf2_geometry_msgs.transformations.rotation_matrix_from_vectors(
+        np.array([0, 0, 1]), direction_normalized  # Align the z-axis
+        )
+
+        quaternion_quat = tf2_geometry_msgs.transformations.quaternion_from_matrix(rotation_matrix)
+
+        # Convert the rotation matrix to a quaternion
+        quaternion.quaternion.x = quaternion_quat[0]
+        quaternion.quaternion.y = quaternion_quat[1]
+        quaternion.quaternion.z = quaternion_quat[2]
+        quaternion.quaternion.w = quaternion_quat[3]
+
+        # Convert to a ROS2 Quaternion message
+        orientation_msg = Quaternion()
+        orientation_msg.x = quaternion.quaternion.x
+        orientation_msg.y = quaternion.quaternion.y
+        orientation_msg.z = quaternion.quaternion.z
+        orientation_msg.w = quaternion.quaternion.w
+
+        result.view_position.orientation = orientation_msg
+
+        # Print the orientation
+        print(f"Orientation Quaternion: {orientation_msg}")
 
         return result
 

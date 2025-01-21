@@ -157,9 +157,9 @@ class MissionInterface(Node):
 
         self.get_logger().debug(
             f"Detect Object Action Result: \n\
-        X = {result.position.x} \n\
-        Y = {result.position.y} \n\
-        Z = {result.position.z} \n\
+        X = {result.object_position.x} \n\
+        Y = {result.object_position.y} \n\
+        Z = {result.object_position.z} \n\
         confidence = {result.confidence}"
         )
 
