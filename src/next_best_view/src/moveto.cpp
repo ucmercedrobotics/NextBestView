@@ -71,6 +71,8 @@ void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
   RCLCPP_INFO(this->get_logger(), "Current efl orientation: %f, %f, %f, %f",
               eel_pose.pose.orientation.x, eel_pose.pose.orientation.y,
               eel_pose.pose.orientation.z, eel_pose.pose.orientation.w);
+  RCLCPP_INFO(this->get_logger(), "Movement type: %s",
+              goal->movement_link.c_str());
 
   if (strncmp(goal->movement_link.c_str(), goal->END_EFFECTOR_LINK.c_str(),
               strlen(goal->END_EFFECTOR_LINK.c_str())) == 0) {
@@ -98,6 +100,13 @@ void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
   // NOTE: I tried doing this with other links as reference and it works
   //       HOWEVER, after one movement, the error builds up and fails goal
   //       tolerance the next move
+  RCLCPP_INFO(this->get_logger(), "Desired efl pose: %f, %f, %f",
+              target_pose.position.x, target_pose.position.y,
+              target_pose.position.z);
+  RCLCPP_INFO(this->get_logger(), "Desired efl orientation: %f, %f, %f, %f",
+              target_pose.orientation.x, target_pose.orientation.y,
+              target_pose.orientation.z, target_pose.orientation.w);
+
   move_group_interface_->setPoseTarget(target_pose);
 
   // Plan the movement to the target pose

@@ -60,11 +60,23 @@
         </xs:sequence>
     </xs:complexType>
 
+    <!-- Simple type for end effector movement types -->
+    <xs:simpleType name="movementType">
+        <xs:restriction base="xs:string">
+            <!-- relative movement defined by movement from end effector current position -->
+            <xs:enumeration value="end_effector_link"/>
+            <!-- absolute movement defined by movement from origin point, not current position -->
+            <xs:enumeration value="base_link"/>
+        </xs:restriction>
+    </xs:simpleType>
+
     <!-- Complex type for object segmentation -->
     <xs:complexType name="identifyObjectType">
         <xs:sequence>
             <!-- object characteristics -->
             <xs:element name="objectName" type="xs:string"/>
+            <!-- distance in meters, normal distance is set to be 0.75m. adjust according to requests -->
+            <xs:element name="objectDistance" type="xs:float"/>
             <xs:element name="objectColor" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
         </xs:sequence>
     </xs:complexType>
@@ -80,10 +92,11 @@
     <!-- Complex type for moving to a relative position -->
     <xs:complexType name="goToPositionType">
         <xs:sequence>
+            <xs:element name="movement" type="movementType"/>
             <!-- meters in all directions -->
-            <!-- X represents lateral movement -->
+            <!-- X represents lateral (sideways) movement -->
             <xs:element name="x" type="xs:decimal"/>
-            <!-- Y represents vertical movement -->
+            <!-- Y represents vertical (up/down) movement -->
             <xs:element name="y" type="xs:decimal"/>
             <!-- Z represents forward and backward movement -->
             <xs:element name="z" type="xs:decimal"/>

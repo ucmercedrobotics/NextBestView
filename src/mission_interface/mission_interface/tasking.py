@@ -46,8 +46,10 @@ class ActionType(str, Enum):
 
 class ParameterTypes(str, Enum):
     GRIPPERVELOCITY = "gripperVelocity"
-    OBJECTNAME = "objectName"
+    MOVEMENT = "movement"
     OBJECTCOLOR = "objectColor"
+    OBJECTDISTANCE = "objectDistance"
+    OBJECTNAME = "objectName"
     PITCH = "pitch"
     RESOLUTION = "resolution"
     ROLL = "roll"
@@ -150,11 +152,12 @@ class GoToPositionLeaf(ActionLeaf):
         action_type: ActionType,
         depth: int,
         namespace: str,
-        movement_link: str,
     ):
         super().__init__(name, action_type, depth, namespace)
 
-        self.movement_link: str = movement_link
+        # default movement
+        self.movement_link: str = MovementLink.BASE_LINK
+
         self.pose: Pose = Pose()
 
     def set_pose(self, pose: Pose) -> None:
@@ -180,6 +183,10 @@ class GoToPositionLeaf(ActionLeaf):
         self.roll: float = roll
         self.pitch: float = pitch
         self.yaw: float = yaw
+
+        self.movement_link = MovementLink(
+            element.find(self.namespace + ParameterTypes.MOVEMENT).text
+        )
 
         self._generate_pose()
 
@@ -243,9 +250,11 @@ class IdentifyObjectLeaf(ActionLeaf):
 
     def parse_xml_parameters(self, element: etree._Element) -> None:
         # schema will validate that these exists. No need to verify
-        object_name: etree._Element = element.find(
-            self.namespace + ParameterTypes.OBJECTNAME
-        ).text
+        object_name: str = element.find(self.namespace + ParameterTypes.OBJECTNAME).text
+
+        object_distance: float = float(
+            element.find(self.namespace + ParameterTypes.OBJECTDISTANCE).text
+        )
 
         color_elements: list[etree._Element] = element.findall(
             self.namespace + ParameterTypes.OBJECTCOLOR
@@ -255,6 +264,7 @@ class IdentifyObjectLeaf(ActionLeaf):
             colors.append(c.text)
 
         self.object_name: str = object_name
+        self.object_distance: float = object_distance
         self.colors: list[str] = colors
 
     def __repr__(self) -> str:

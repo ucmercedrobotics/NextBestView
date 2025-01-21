@@ -10,9 +10,9 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PointStamped, PoseStamped, Vector3, Quaternion
+from geometry_msgs.msg import PoseStamped
 import tf2_ros
-import tf2_geometry_msgs
+from scipy.spatial.transform import Rotation
 from tf2_geometry_msgs import do_transform_pose_stamped
 
 from kinova_action_interfaces.action import DetectObject
@@ -124,8 +124,9 @@ class ObjectDetectionNode(Node):
 
                     feedback_msg.processing_status = (
                         f"Object detected at base_link coordinates "
-                        f"({result.position.x:.2f}, {result.position.y:.2f}, {result.position.z:.2f}) "
+                        f"({result.object_position.x:.2f}, {result.object_position.y:.2f}, {result.object_position.z:.2f}) "
                         f"({result.view_position.position.x:.2f}, {result.view_position.position.y:.2f}, {result.view_position.position.z:.2f}) "
+                        f"({result.view_position.orientation.x:.2f}, {result.view_position.orientation.y:.2f}, {result.view_position.orientation.z:.2f}), {result.view_position.orientation.w:.2f})"
                         f"with confidence: {result.confidence:.2f}"
                     )
                     goal_handle.publish_feedback(feedback_msg)
@@ -202,75 +203,44 @@ class ObjectDetectionNode(Node):
             object_view_point, transform
         )
 
-        result.view_position.position.x = (
-            object_view_point_in_base_frame.pose.position.x
-        )
-        result.view_position.position.y = (
-            object_view_point_in_base_frame.pose.position.y
-        )
-        result.view_position.position.z = (
-            object_view_point_in_base_frame.pose.position.z
-        )
-
-        # TODO: set view_position orientation
+        result.view_position = object_view_point_in_base_frame.pose
 
         # Calculate direction vector
-        direction = np.array([
-            object_in_base_frame.pose.x - object_view_point.pose.position.x,
-            object_in_base_frame.pose.y - object_view_point.pose.position.y,
-            object_in_base_frame.pose.z - object_view_point.pose.position.z
-            ])
-        
-        # Normalize the direction vector
-        norm = np.linalg.norm(direction)
-        direction_normalized = direction / norm
+        # direction = np.array([
+        #     object_in_base_frame.pose.position.x - object_view_point.pose.position.x,
+        #     object_in_base_frame.pose.position.y - object_view_point.pose.position.y,
+        #     object_in_base_frame.pose.position.z - object_view_point.pose.position.z
+        #     ])
 
-        # Define the local z-axis (the axis you want to align with the target)
-        z_axis = np.array([0, 0, 1])
-        
-        # Compute the rotation axis (cross product of z_axis and direction_normalized)
-        rotation_axis = np.cross(z_axis, direction_normalized)
+        # # Normalize the direction vector
+        # norm = np.linalg.norm(direction)
+        # direction_normalized = direction / norm
 
-        # Compute the rotation angle (dot product of z_axis and direction_normalized)
-        rotation_angle = np.arccos(np.dot(z_axis, direction_normalized))
+        # # Define a potential up vector
+        # V_up = np.array([0.0, 0.0, 1.0])  # Arbitrary "up" vector
+        # # Check if the up vector is nearly parallel to the approach vector using dot product
+        # dot_product = np.dot(V_up, direction_normalized)
 
-        # Handle the case where direction is parallel to z_axis
-        if np.linalg.norm(rotation_axis) < 1e-6:
-        # If rotation_axis is near zero, the vectors are parallel, so no rotation is needed
-            quaternion = [0, 0, 0, 1]  # Identity quaternion
-        
-        else:
-            rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)  # Normalize the rotation axis
+        # # If they're nearly parallel, choose a different up vector
+        # if np.abs(dot_product) > 0.99:  # Vectors are nearly parallel
+        #     V_up = np.array([1.0, 0.0, 0.0])  # Use x-axis as the up vector instead
 
-            # Calculate quaternion components
-            sin_half_angle = np.sin(rotation_angle / 2)
-            cos_half_angle = np.cos(rotation_angle / 2)
-            quaternion = [
-                rotation_axis[0] * sin_half_angle,
-                rotation_axis[1] * sin_half_angle,
-                rotation_axis[2] * sin_half_angle,
-                cos_half_angle
-            ]
-        
-        # For simplicity, we'll align the z-axis of the end effector with the target point direction
-        #quaternion = tf2_ros.QuaternionStamped()
-        #rotation_matrix = tf2_geometry_msgs.transformations.rotation_matrix_from_vectors(
-        #np.array([0, 0, 1]), direction_normalized  # Align the z-axis
-        #)
+        # x_axis = np.cross(V_up, direction_normalized)
+        # x_axis /= np.linalg.norm(x_axis)  # Normalize x-axis
 
-        #quaternion_quat = tf2_geometry_msgs.transformations.quaternion_from_matrix(rotation_matrix)
+        # y_axis = np.cross(direction_normalized, x_axis)
 
-        # Convert to a ROS2 Quaternion message
-        orientation_msg = Quaternion()
-        orientation_msg.x = quaternion[0]
-        orientation_msg.y = quaternion[1]
-        orientation_msg.z = quaternion[2]
-        orientation_msg.w = quaternion[3]
+        # # Construct rotation matrix
+        # R = np.column_stack((x_axis, y_axis, direction_normalized))  # Columns are right, up, forward
 
-        result.view_position.orientation = orientation_msg
+        # # Convert rotation matrix to quaternion
+        # rotation = Rotation.from_matrix(R)
+        # quaternion = rotation.as_quat()  # [x, y, z, w]
 
-        # Print the orientation
-        print(f"Orientation Quaternion: {orientation_msg}")
+        # result.view_position.orientation.x = quaternion[0]
+        # result.view_position.orientation.y = quaternion[1]
+        # result.view_position.orientation.z = quaternion[2]
+        # result.view_position.orientation.w = quaternion[3]
 
         return result
 

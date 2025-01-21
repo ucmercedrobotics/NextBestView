@@ -137,8 +137,7 @@ class MissionInterface(Node):
         goal: DetectObject.Goal = DetectObject.Goal()
         goal.target_class = task.object_name
         goal.colors = task.colors
-        # TODO: fix this
-        goal.target_view_point_distance = 1.0
+        goal.target_view_point_distance = task.object_distance
 
         self.detect_object_client.wait_for_server()
         self.get_logger().info(
@@ -165,7 +164,7 @@ class MissionInterface(Node):
 
         # TODO: we can convert this from X,Y movement to rotational movement (harder)
         task: GoToPositionLeaf = GoToPositionLeaf(
-            "detect_object", ActionType.GOTOPOSITION, 0, "", MovementLink.BASE_LINK
+            "detect_object", ActionType.GOTOPOSITION, 0, ""
         )
         task.set_pose(result.view_position)
         if not self._send_kinova_go_to_goal(task):
