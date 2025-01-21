@@ -12,7 +12,7 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import PointStamped, PoseStamped
 import tf2_ros
-from tf2_geometry_msgs import do_transform_point
+from tf2_geometry_msgs import do_transform_pose_stamped
 
 from kinova_action_interfaces.action import DetectObject
 
@@ -124,7 +124,7 @@ class ObjectDetectionNode(Node):
                     feedback_msg.processing_status = (
                         f"Object detected at base_link coordinates "
                         f"({result.position.x:.2f}, {result.position.y:.2f}, {result.position.z:.2f}) "
-                        f"({result.view_position.x:.2f}, {result.view_position.y:.2f}, {result.view_position.z:.2f}) "
+                        f"({result.view_position.position.x:.2f}, {result.view_position.position.y:.2f}, {result.view_position.position.z:.2f}) "
                         f"with confidence: {result.confidence:.2f}"
                     )
                     goal_handle.publish_feedback(feedback_msg)
@@ -176,10 +176,10 @@ class ObjectDetectionNode(Node):
         result: DetectObject.Result = DetectObject.Result()
 
         # Transform the object position from camera_link to base_link
-        object_in_camera_frame = PointStamped()
-        object_in_camera_frame.point.x = X
-        object_in_camera_frame.point.y = Y
-        object_in_camera_frame.point.z = Z
+        object_in_camera_frame = PoseStamped()
+        object_in_camera_frame.pose.position.x = X
+        object_in_camera_frame.pose.position.y = Y
+        object_in_camera_frame.pose.position.z = Z
 
         object_view_point = PoseStamped()
         object_view_point.pose.position.x = X
@@ -189,19 +189,27 @@ class ObjectDetectionNode(Node):
         transform = self._tf_buffer.lookup_transform(
             "base_link", "camera_link", rclpy.time.Time()
         )
-        object_in_base_frame = do_transform_point(object_in_camera_frame, transform)
-
-        result.position.x = object_in_base_frame.point.x
-        result.position.y = object_in_base_frame.point.y
-        result.position.z = object_in_base_frame.point.z
-
-        object_view_point_in_base_frame = do_transform_point(
-            object_view_point.pose.position, transform
+        object_in_base_frame = do_transform_pose_stamped(
+            object_in_camera_frame, transform
         )
 
-        result.view_position.x = object_view_point_in_base_frame.point.x
-        result.view_position.y = object_view_point_in_base_frame.point.y
-        result.view_position.z = object_view_point_in_base_frame.point.z
+        result.position.x = object_in_base_frame.pose.position.x
+        result.position.y = object_in_base_frame.pose.position.y
+        result.position.z = object_in_base_frame.pose.position.z
+
+        object_view_point_in_base_frame = do_transform_pose_stamped(
+            object_view_point, transform
+        )
+
+        result.view_position.position.x = (
+            object_view_point_in_base_frame.pose.position.x
+        )
+        result.view_position.position.y = (
+            object_view_point_in_base_frame.pose.position.y
+        )
+        result.view_position.position.z = (
+            object_view_point_in_base_frame.pose.position.z
+        )
 
         # TODO: set view_position orientation
 

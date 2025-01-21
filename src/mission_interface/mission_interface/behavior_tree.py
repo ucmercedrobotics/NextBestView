@@ -133,16 +133,12 @@ class BehaviorTree:
         # to make this generic, the action will always be after the action type
         action: etree._Element = action_type.getnext()
 
-        try:
-            # find from the dictionary which constructor to use
-            t: ActionLeaf = TASK_CONSTRUCTORS[action_type.text](
-                name, action_type.text, depth, self.namespace
-            )
-            t.parse_xml_parameters(action)
-        except:
-            self.logger.error(
-                f"Invalid action type {action_type.text}. No implementation found..."
-            )
+        # find from the dictionary which constructor to use
+        t: ActionLeaf = TASK_CONSTRUCTORS[action_type.text](
+            name, action_type.text, depth, self.namespace
+        )
+        t.parse_xml_parameters(action)
+
         # NOTE: this is the root task of the behavior tree
         if parent is None:
             self.task_root = t

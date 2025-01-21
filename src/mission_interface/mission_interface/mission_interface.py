@@ -137,6 +137,8 @@ class MissionInterface(Node):
         goal: DetectObject.Goal = DetectObject.Goal()
         goal.target_class = task.object_name
         goal.colors = task.colors
+        # TODO: fix this
+        goal.target_view_point_distance = 1.0
 
         self.detect_object_client.wait_for_server()
         self.get_logger().info(
@@ -197,9 +199,9 @@ class MissionInterface(Node):
 
         self.get_logger().debug(
             f"Move To Result: \n\
-        X = {goal.pose.x} \n\
-        Y = {goal.pose.y} \n\
-        Z = {goal.pose.z} ->\n\
+        X = {goal.pose.position.x} \n\
+        Y = {goal.pose.position.y} \n\
+        Z = {goal.pose.position.z} ->\n\
         {result.success}"
         )
 
