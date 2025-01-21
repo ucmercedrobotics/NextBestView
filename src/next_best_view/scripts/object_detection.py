@@ -214,12 +214,6 @@ class ObjectDetectionNode(Node):
 
         # TODO: set view_position orientation
 
-        direction = Vector3()
-
-        direction.x = object_in_base_frame.pose.x - object_view_point.pose.position.x;
-        direction.y = object_in_base_frame.pose.y - object_view_point.pose.position.y;
-        direction.z = object_in_base_frame.pose.z - object_view_point.pose.position.z;
-
         # Calculate direction vector
         direction = np.array([
             object_in_base_frame.pose.x - object_view_point.pose.position.x,
@@ -231,26 +225,47 @@ class ObjectDetectionNode(Node):
         norm = np.linalg.norm(direction)
         direction_normalized = direction / norm
 
+        # Define the local z-axis (the axis you want to align with the target)
+        z_axis = np.array([0, 0, 1])
+        
+        # Compute the rotation axis (cross product of z_axis and direction_normalized)
+        rotation_axis = np.cross(z_axis, direction_normalized)
+
+        # Compute the rotation angle (dot product of z_axis and direction_normalized)
+        rotation_angle = np.arccos(np.dot(z_axis, direction_normalized))
+
+        # Handle the case where direction is parallel to z_axis
+        if np.linalg.norm(rotation_axis) < 1e-6:
+        # If rotation_axis is near zero, the vectors are parallel, so no rotation is needed
+            quaternion = [0, 0, 0, 1]  # Identity quaternion
+        
+        else:
+            rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)  # Normalize the rotation axis
+
+            # Calculate quaternion components
+            sin_half_angle = np.sin(rotation_angle / 2)
+            cos_half_angle = np.cos(rotation_angle / 2)
+            quaternion = [
+                rotation_axis[0] * sin_half_angle,
+                rotation_axis[1] * sin_half_angle,
+                rotation_axis[2] * sin_half_angle,
+                cos_half_angle
+            ]
+        
         # For simplicity, we'll align the z-axis of the end effector with the target point direction
-        quaternion = tf2_ros.QuaternionStamped()
-        rotation_matrix = tf2_geometry_msgs.transformations.rotation_matrix_from_vectors(
-        np.array([0, 0, 1]), direction_normalized  # Align the z-axis
-        )
+        #quaternion = tf2_ros.QuaternionStamped()
+        #rotation_matrix = tf2_geometry_msgs.transformations.rotation_matrix_from_vectors(
+        #np.array([0, 0, 1]), direction_normalized  # Align the z-axis
+        #)
 
-        quaternion_quat = tf2_geometry_msgs.transformations.quaternion_from_matrix(rotation_matrix)
-
-        # Convert the rotation matrix to a quaternion
-        quaternion.quaternion.x = quaternion_quat[0]
-        quaternion.quaternion.y = quaternion_quat[1]
-        quaternion.quaternion.z = quaternion_quat[2]
-        quaternion.quaternion.w = quaternion_quat[3]
+        #quaternion_quat = tf2_geometry_msgs.transformations.quaternion_from_matrix(rotation_matrix)
 
         # Convert to a ROS2 Quaternion message
         orientation_msg = Quaternion()
-        orientation_msg.x = quaternion.quaternion.x
-        orientation_msg.y = quaternion.quaternion.y
-        orientation_msg.z = quaternion.quaternion.z
-        orientation_msg.w = quaternion.quaternion.w
+        orientation_msg.x = quaternion[0]
+        orientation_msg.y = quaternion[1]
+        orientation_msg.z = quaternion[2]
+        orientation_msg.w = quaternion[3]
 
         result.view_position.orientation = orientation_msg
 
