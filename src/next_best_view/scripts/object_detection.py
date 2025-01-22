@@ -205,52 +205,61 @@ class ObjectDetectionNode(Node):
 
         result.view_position = object_view_point_in_base_frame.pose
 
-
-        transform_ee = self._tf_buffer.lookup_transform("base_link", "end_effector_link", rclpy.time.Time())
+        transform_ee = self._tf_buffer.lookup_transform(
+            "base_link", "end_effector_link", rclpy.time.Time()
+        )
 
         # Extract rotation (quaternion)
         end_effector_quat = [
             transform_ee.transform.rotation.x,
             transform_ee.transform.rotation.y,
             transform_ee.transform.rotation.z,
-            transform_ee.transform.rotation.w
-            ]
-        
-        
-        print(f"end_effector_quat= x:{end_effector_quat[0]}, y:{end_effector_quat[1]}, z:{end_effector_quat[2]}, w:{end_effector_quat[3]} ")
+            transform_ee.transform.rotation.w,
+        ]
 
-        end_effector_rotation =Rotation.from_quat(end_effector_quat)
-        
+        print(
+            f"end_effector_quat= x:{end_effector_quat[0]}, y:{end_effector_quat[1]}, z:{end_effector_quat[2]}, w:{end_effector_quat[3]} "
+        )
+
+        end_effector_rotation = Rotation.from_quat(end_effector_quat)
+
         print(f"end_effector_rotation= {end_effector_rotation.as_matrix()}")
-            
+
         # Calculate direction vector
-        direction = np.array([
-             object_in_base_frame.pose.position.x - object_view_point.pose.position.x,
-             object_in_base_frame.pose.position.y - object_view_point.pose.position.y,
-             object_in_base_frame.pose.position.z - object_view_point.pose.position.z
-             ])
+        direction = np.array(
+            [
+                object_in_base_frame.pose.position.x
+                - object_view_point.pose.position.x,
+                object_in_base_frame.pose.position.y
+                - object_view_point.pose.position.y,
+                object_in_base_frame.pose.position.z
+                - object_view_point.pose.position.z,
+            ]
+        )
 
         z_axis_target = direction / np.linalg.norm(direction)
 
-        z_axis_current = end_effector_rotation.as_matrix[:,2] # Third column is the current Z-axis
+        z_axis_current = end_effector_rotation.as_matrix()[
+            :, 2
+        ]  # Third column is the current Z-axis
 
         # Compute the axis of rotation (cross product)
         axis = np.cross(z_axis_current, z_axis_target)
         axis = axis / np.linalg.norm(axis)  # Normalize the rotation axis
-        
+
         # Compute the angle of rotation (dot product)
         cos_theta = np.dot(z_axis_current, z_axis_target)
         theta = np.arccos(cos_theta)
 
         # Rodrigues' rotation formula
-        K = np.array([[0, -axis[2], axis[1]],
-              [axis[2], 0, -axis[0]],
-              [-axis[1], axis[0], 0]])
+        K = np.array(
+            [[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]]
+        )
 
         I = np.eye(3)
         R_align = I + np.sin(theta) * K + (1 - np.cos(theta)) * np.dot(K, K)
 
-        R_new = np.dot(R_align, end_effector_rotation.as_matrix)
+        R_new = np.dot(R_align, end_effector_rotation.as_matrix())
 
         rotation = Rotation.from_matrix(R_new)
         quaternion = rotation.as_quat()
