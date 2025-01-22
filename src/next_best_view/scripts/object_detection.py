@@ -205,42 +205,62 @@ class ObjectDetectionNode(Node):
 
         result.view_position = object_view_point_in_base_frame.pose
 
+
+        transform_ee = self._tf_buffer.lookup_transform("base_link", "end_effector_link", rclpy.time.Time())
+
+        # Extract rotation (quaternion)
+        end_effector_quat = [
+            transform_ee.transform.rotation.x,
+            transform_ee.transform.rotation.y,
+            transform_ee.transform.rotation.z,
+            transform_ee.transform.rotation.w
+            ]
+        
+        
+        print(f"end_effector_quat= x:{end_effector_quat[0]}, y:{end_effector_quat[1]}, z:{end_effector_quat[2]}, w:{end_effector_quat[3]} ")
+
+        end_effector_rotation =Rotation.from_quat(end_effector_quat)
+        
+        print(f"end_effector_rotation= {end_effector_rotation.as_matrix()}")
+            
         # Calculate direction vector
-        # direction = np.array([
-        #     object_in_base_frame.pose.position.x - object_view_point.pose.position.x,
-        #     object_in_base_frame.pose.position.y - object_view_point.pose.position.y,
-        #     object_in_base_frame.pose.position.z - object_view_point.pose.position.z
-        #     ])
+        direction = np.array([
+             object_in_base_frame.pose.position.x - object_view_point.pose.position.x,
+             object_in_base_frame.pose.position.y - object_view_point.pose.position.y,
+             object_in_base_frame.pose.position.z - object_view_point.pose.position.z
+             ])
 
-        # # Normalize the direction vector
-        # norm = np.linalg.norm(direction)
-        # direction_normalized = direction / norm
+        z_axis_target = direction / np.linalg.norm(direction)
 
-        # # Define a potential up vector
-        # V_up = np.array([0.0, 0.0, 1.0])  # Arbitrary "up" vector
-        # # Check if the up vector is nearly parallel to the approach vector using dot product
-        # dot_product = np.dot(V_up, direction_normalized)
+        z_axis_current = end_effector_rotation.as_matrix[:,2] # Third column is the current Z-axis
 
-        # # If they're nearly parallel, choose a different up vector
-        # if np.abs(dot_product) > 0.99:  # Vectors are nearly parallel
-        #     V_up = np.array([1.0, 0.0, 0.0])  # Use x-axis as the up vector instead
+        # Compute the axis of rotation (cross product)
+        axis = np.cross(z_axis_current, z_axis_target)
+        axis = axis / np.linalg.norm(axis)  # Normalize the rotation axis
+        
+        # Compute the angle of rotation (dot product)
+        cos_theta = np.dot(z_axis_current, z_axis_target)
+        theta = np.arccos(cos_theta)
 
-        # x_axis = np.cross(V_up, direction_normalized)
-        # x_axis /= np.linalg.norm(x_axis)  # Normalize x-axis
+        # Rodrigues' rotation formula
+        K = np.array([[0, -axis[2], axis[1]],
+              [axis[2], 0, -axis[0]],
+              [-axis[1], axis[0], 0]])
 
-        # y_axis = np.cross(direction_normalized, x_axis)
+        I = np.eye(3)
+        R_align = I + np.sin(theta) * K + (1 - np.cos(theta)) * np.dot(K, K)
 
-        # # Construct rotation matrix
-        # R = np.column_stack((x_axis, y_axis, direction_normalized))  # Columns are right, up, forward
+        R_new = np.dot(R_align, end_effector_rotation.as_matrix)
 
-        # # Convert rotation matrix to quaternion
-        # rotation = Rotation.from_matrix(R)
-        # quaternion = rotation.as_quat()  # [x, y, z, w]
+        rotation = Rotation.from_matrix(R_new)
+        quaternion = rotation.as_quat()
 
-        # result.view_position.orientation.x = quaternion[0]
-        # result.view_position.orientation.y = quaternion[1]
-        # result.view_position.orientation.z = quaternion[2]
-        # result.view_position.orientation.w = quaternion[3]
+        print(f"quaternion of alligned end_effector = {quaternion}")
+
+        result.view_position.orientation.x = quaternion[0]
+        result.view_position.orientation.y = quaternion[1]
+        result.view_position.orientation.z = quaternion[2]
+        result.view_position.orientation.w = quaternion[3]
 
         return result
 
