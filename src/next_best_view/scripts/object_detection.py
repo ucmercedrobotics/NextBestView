@@ -217,13 +217,11 @@ class ObjectDetectionNode(Node):
             transform_ee.transform.rotation.w,
         ]
 
-        print(
-            f"end_effector_quat= x:{end_effector_quat[0]}, y:{end_effector_quat[1]}, z:{end_effector_quat[2]}, w:{end_effector_quat[3]} "
-        )
+        # print(f"end_effector_quat= x:{end_effector_quat[0]}, y:{end_effector_quat[1]}, z:{end_effector_quat[2]}, w:{end_effector_quat[3]} ")
 
         end_effector_rotation = Rotation.from_quat(end_effector_quat)
 
-        print(f"end_effector_rotation= {end_effector_rotation.as_matrix()}")
+        # print(f"end_effector_rotation= {end_effector_rotation.as_matrix()}")
 
         # Calculate direction vector
         direction = np.array(
@@ -257,11 +255,13 @@ class ObjectDetectionNode(Node):
         )
 
         I = np.eye(3)
-        R_align = I + np.sin(theta) * K + (1 - np.cos(theta)) * np.dot(K, K)
+        R_align = I + np.sin(theta) * K + np.dot(K, K) * (1 - np.cos(theta))
 
-        R_new = np.dot(R_align, end_effector_rotation.as_matrix())
+        ######################################################
+        # R_new = np.dot(R_align, end_effector_rotation.as_matrix())
 
-        rotation = Rotation.from_matrix(R_new)
+        # rotation = Rotation.from_matrix(R_new)
+        rotation = Rotation.from_matrix(R_align)
         quaternion = rotation.as_quat()
 
         print(f"quaternion of alligned end_effector = {quaternion}")
