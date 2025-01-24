@@ -1,11 +1,15 @@
 # Request
 string target_class
 string[] colors
+#How should be the distance between camera and object
+float32 target_view_point_distance
 ---
 # Result
 bool success
 geometry_msgs/Point position
 float32 confidence
+#Location of the object view point
+geometry_msgs/Point view_position
 ---
 # Feedback
 string processing_status
