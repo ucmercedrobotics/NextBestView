@@ -17,6 +17,10 @@ from tf2_geometry_msgs import do_transform_pose_stamped
 
 from kinova_action_interfaces.action import DetectObject
 
+from geometry_msgs.msg import PointStamped
+import tf2_ros
+from tf2_geometry_msgs import do_transform_point
+
 
 METER_TO_MILLIMETER: float = 1000.0
 
@@ -281,7 +285,7 @@ class ObjectDetectionNode(Node):
         self.get_logger().debug(f"quaternion of alligned end_effector = {quaternion}")
 
         return quaternion
-
+      
     def _yolo_object_detection(self, frames: dict, target_class: str) -> list[dict]:
         """Detect object using YOLOv11 from BGR image frame and compute depth
 
