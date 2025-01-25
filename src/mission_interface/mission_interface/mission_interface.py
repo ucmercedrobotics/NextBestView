@@ -9,8 +9,14 @@ from rclpy.action import ActionClient
 from .network_interface import NetworkInterface
 from .mission_decoder import MissionDecoder
 from .behavior_tree import BehaviorTree
-from .tasking import TaskLeaf, IdentifyObjectLeaf, NextBestViewLeaf, GoToPositionLeaf
-from kinova_action_interfaces.action import DetectObject
+from .tasking import (
+    TaskLeaf,
+    IdentifyObjectLeaf,
+    NextBestViewLeaf,
+    GoToPositionLeaf,
+    ActionType,
+)
+from kinova_action_interfaces.action import DetectObject, MoveTo
 
 
 NODE_NAME: str = "kinova_mission_interface"
@@ -48,7 +54,12 @@ class MissionInterface(Node):
 
         self._configure_network(config_yaml["host"], config_yaml["port"])
 
-        self.detect_object_client = ActionClient(self, DetectObject, "detect_object")
+        self.detect_object_client: ActionClient = ActionClient(
+            self, DetectObject, "/next_best_view/detect_object"
+        )
+        self.kinova_move_to_client: ActionClient = ActionClient(
+            self, MoveTo, "/next_best_view/move_to_action"
+        )
 
         self.action_callback_map: dict = {
             "identifyObject": self._send_detect_object_goal,
@@ -125,40 +136,69 @@ class MissionInterface(Node):
         goal: DetectObject.Goal = DetectObject.Goal()
         goal.target_class = task.object_name
         goal.colors = task.colors
+        goal.target_view_point_distance = task.object_distance
 
         self.detect_object_client.wait_for_server()
         self.get_logger().info(
             f"Detect Object Action server available. Sending goal to find {goal.target_class}..."
         )
 
+        # core logic for synchronous action call
         future = self.detect_object_client.send_goal_async(goal)
-
         rclpy.spin_until_future_complete(self, future)
-
         result_future = self._goal_response_callback(future)
-
         rclpy.spin_until_future_complete(self, result_future)
-
-        result = self._result_callback(result_future)
+        result: DetectObject.Result = self._result_callback(result_future)
 
         self.get_logger().debug(
             f"Detect Object Action Result: \n\
-        X = {result.position.x} \n\
-        Y = {result.position.y} \n\
-        Z = {result.position.z} \n\
+        X = {result.object_position.x} \n\
+        Y = {result.object_position.y} \n\
+        Z = {result.object_position.z} \n\
         confidence = {result.confidence}"
         )
 
-        # TODO: add centering inverse kinematic action call (moveit)
+        # if you found the object successfully, center it
+        if result.success:
+            # TODO: we can convert this from X,Y movement to rotational movement (harder)
+            task: GoToPositionLeaf = GoToPositionLeaf(
+                "detect_object", ActionType.GOTOPOSITION, 0, ""
+            )
+            task.set_pose(result.view_position)
+            result.success = self._send_kinova_go_to_goal(task)
 
-        # return result.success
-        return True
+        return result.success
 
     def _send_nbv_goal(self, task: NextBestViewLeaf):
         pass
 
-    def _send_kinova_go_to_goal(self, task: GoToPositionLeaf):
-        pass
+    def _send_kinova_go_to_goal(self, task: GoToPositionLeaf) -> bool:
+        goal: MoveTo.Goal = MoveTo.Goal()
+        goal.task_name = task.name
+        goal.movement_link = task.movement_link
+        goal.pose = task.pose
+
+        self.kinova_move_to_client.wait_for_server()
+        self.get_logger().info(
+            f"Kinova Move To server available. Sending move task {goal.task_name}..."
+        )
+
+        # core logic for synchronous action call
+        future = self.kinova_move_to_client.send_goal_async(goal)
+        rclpy.spin_until_future_complete(self, future)
+        result_future = self._goal_response_callback(future)
+        rclpy.spin_until_future_complete(self, result_future)
+        result: MoveTo.Result = self._result_callback(result_future)
+
+        self.get_logger().debug(
+            f"Move To Result: \n\
+        X = {goal.pose.position.x} \n\
+        Y = {goal.pose.position.y} \n\
+        Z = {goal.pose.position.z} ->\n\
+        {result.success}"
+        )
+
+        return result.success
 
     def _goal_response_callback(self, future):
         goal_handle = future.result()

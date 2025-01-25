@@ -14,16 +14,14 @@
 <!-- [![arXiv](https://img.shields.io/badge/arXiv-2409.04653-b31b1b.svg)](https://arxiv.org/abs/2409.04653) -->
 
 ## How to Start
-Make sure you initialize the repo with the repo pre-commits:
-```bash
-make repo-init
-```
-
-After, build your container:
+Build your container:
 ```bash
 make build-image
 ```
-
+After, make sure you initialize the repo with the repo pre-commits:
+```bash
+make repo-init
+```
 You'll be forwarding graphic display to noVNC using your browser.
 First start the Docker network that will manage these packets:
 To start, make your local Docker network to connect your VNC client, local machine, and Kinova together. You'll use this later when remote controlling the Kinova.

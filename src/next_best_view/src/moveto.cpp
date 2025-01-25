@@ -71,6 +71,8 @@ void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
   RCLCPP_INFO(this->get_logger(), "Current efl orientation: %f, %f, %f, %f",
               eel_pose.pose.orientation.x, eel_pose.pose.orientation.y,
               eel_pose.pose.orientation.z, eel_pose.pose.orientation.w);
+  RCLCPP_INFO(this->get_logger(), "Movement type: %s",
+              goal->movement_link.c_str());
 
   if (strncmp(goal->movement_link.c_str(), goal->END_EFFECTOR_LINK.c_str(),
               strlen(goal->END_EFFECTOR_LINK.c_str())) == 0) {
@@ -85,56 +87,11 @@ void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
     // link
     target_pose.position = goal->pose.position;
     target_pose.orientation = goal->pose.orientation;
-  } else if (strncmp(goal->movement_link.c_str(), goal->CAMERA_LINK.c_str(),
-                     strlen(goal->CAMERA_LINK.c_str())) == 0) {
-    // NOTE: I THINK THIS WORKS BUT I DONT KNOW THE 3D POSE FRAME OF YOLO
-    // YOU CAN ADD THE STATIC TF + THE 180
-    // I DONT KNOW IF 180 IS INCLUDED IN THAT TF, IT SHOULD BE?
-    // IF SO REMOVE PART ADDING 180 ADJUSTMENT. I CANT PLAY AROUND WITH THE
-    // MACHINE RIGHT NOW REQUIRES TESTING TOMORROW
-
-    // // Get end effector link to camera link transform (note the reversed
-    // order) geometry_msgs::msg::TransformStamped ee_to_camera_transform; try {
-    //     ee_to_camera_transform =
-    //     tf_buffer_->lookupTransform(goal->CAMERA_LINK,
-    //     goal->END_EFFECTOR_LINK, tf2::TimePointZero);
-    // } catch (tf2::TransformException &ex) {
-    //     RCLCPP_ERROR(this->get_logger(), "Transform error: %s", ex.what());
-    //     return;
-    // }
-
-    // // If needed, apply the Z-axis rotation adjustment
-    // tf2::Quaternion adjust_rotation;
-    // adjust_rotation.setRPY(0, 0, M_PI); // 180-degree rotation around Z-axis
-    // tf2::Transform adjustment(tf2::Matrix3x3(adjust_rotation),
-    // tf2::Vector3(0, 0, 0));
-
-    // // Convert ee_to_camera_transform to tf2::Transform
-    // tf2::Transform ee_to_camera_tf2;
-    // tf2::fromMsg(ee_to_camera_transform.transform, ee_to_camera_tf2);
-
-    // // Apply adjustment if needed
-    // ee_to_camera_tf2 = ee_to_camera_tf2 * adjustment;
-    // ee_to_camera_transform.transform = tf2::toMsg(ee_to_camera_tf2);
-
-    // // Transform goal pose from camera frame to end effector frame
-    // geometry_msgs::msg::PoseStamped camera_goal;
-    // camera_goal.header.frame_id = goal->CAMERA_LINK;
-    // camera_goal.pose = goal->pose;
-
-    // geometry_msgs::msg::PoseStamped ee_relative_goal;
-    // tf2::doTransform(camera_goal, ee_relative_goal, ee_to_camera_transform);
-
-    // Now compute the final target pose using the relative goal
-    // target_pose = compute_relative_goal_pose(eel_pose.pose,
-    // ee_relative_goal.pose);
-
-    target_pose = compute_relative_goal_pose(eel_pose.pose, goal->pose);
   } else {
     RCLCPP_ERROR(this->get_logger(),
-                 "Bad link requested for movement: %s. Expected: %s, %s, %s",
+                 "Bad link requested for movement: %s. Expected: %s, %s",
                  goal->movement_link.c_str(), goal->END_EFFECTOR_LINK.c_str(),
-                 goal->BASE_LINK.c_str(), goal->CAMERA_LINK.c_str());
+                 goal->BASE_LINK.c_str());
     send_feedback(goal_handle, "FAILED");
     return;
   }
@@ -143,6 +100,13 @@ void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
   // NOTE: I tried doing this with other links as reference and it works
   //       HOWEVER, after one movement, the error builds up and fails goal
   //       tolerance the next move
+  RCLCPP_INFO(this->get_logger(), "Desired efl pose: %f, %f, %f",
+              target_pose.position.x, target_pose.position.y,
+              target_pose.position.z);
+  RCLCPP_INFO(this->get_logger(), "Desired efl orientation: %f, %f, %f, %f",
+              target_pose.orientation.x, target_pose.orientation.y,
+              target_pose.orientation.z, target_pose.orientation.w);
+
   move_group_interface_->setPoseTarget(target_pose);
 
   // Plan the movement to the target pose
@@ -151,12 +115,21 @@ void MoveToNode::execute(const std::shared_ptr<GoalHandleMoveTo> goal_handle) {
                   moveit::core::MoveItErrorCode::SUCCESS);
 
   if (success) {
-    move_group_interface_->execute(plan);   // Execute the planned movement
+    moveit::core::MoveItErrorCode ret =
+        move_group_interface_->execute(plan);  // Execute the planned movement
+    if (ret == moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
+      result->success = true;
+    } else {
+      result->success = false;
+      send_feedback(goal_handle, "Execution failed");  // Send failure feedback
+    }
     send_feedback(goal_handle, "SUCCESS");  // Send success feedback
-    goal_handle->succeed(result);           // Mark the goal as succeeded
   } else {
-    send_feedback(goal_handle, "FAILED");  // Send failure feedback
+    result->success = false;
+    send_feedback(goal_handle, "Planning failed");  // Send failure feedback
   }
+
+  goal_handle->succeed(result);  // Mark the goal as succeeded
 }
 
 // Send feedback to the client

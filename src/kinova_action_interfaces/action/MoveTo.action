@@ -6,8 +6,6 @@ string task_name
 string END_EFFECTOR_LINK = "end_effector_link"
 # with respect to base_link
 string BASE_LINK = "base_link"
-# with respect to camera_link
-string CAMERA_LINK = "camera_link"
 string movement_link
 # 3D position relative to the link you choose
 geometry_msgs/Pose pose
@@ -15,7 +13,7 @@ geometry_msgs/Pose pose
 ---
 # Result
 # Position is reachable or not
-string result
+bool success
 
 ---
 # Feedback
