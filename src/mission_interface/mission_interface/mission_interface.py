@@ -14,7 +14,6 @@ from .tasking import (
     IdentifyObjectLeaf,
     NextBestViewLeaf,
     GoToPositionLeaf,
-    MovementLink,
     ActionType,
 )
 from kinova_action_interfaces.action import DetectObject, MoveTo
@@ -144,14 +143,11 @@ class MissionInterface(Node):
             f"Detect Object Action server available. Sending goal to find {goal.target_class}..."
         )
 
+        # core logic for synchronous action call
         future = self.detect_object_client.send_goal_async(goal)
-
         rclpy.spin_until_future_complete(self, future)
-
         result_future = self._goal_response_callback(future)
-
         rclpy.spin_until_future_complete(self, result_future)
-
         result: DetectObject.Result = self._result_callback(result_future)
 
         self.get_logger().debug(
@@ -162,13 +158,14 @@ class MissionInterface(Node):
         confidence = {result.confidence}"
         )
 
-        # TODO: we can convert this from X,Y movement to rotational movement (harder)
-        task: GoToPositionLeaf = GoToPositionLeaf(
-            "detect_object", ActionType.GOTOPOSITION, 0, ""
-        )
-        task.set_pose(result.view_position)
-        if not self._send_kinova_go_to_goal(task):
-            result.success = False
+        # if you found the object successfully, center it
+        if result.success:
+            # TODO: we can convert this from X,Y movement to rotational movement (harder)
+            task: GoToPositionLeaf = GoToPositionLeaf(
+                "detect_object", ActionType.GOTOPOSITION, 0, ""
+            )
+            task.set_pose(result.view_position)
+            result.success = self._send_kinova_go_to_goal(task)
 
         return result.success
 
@@ -186,14 +183,11 @@ class MissionInterface(Node):
             f"Kinova Move To server available. Sending move task {goal.task_name}..."
         )
 
+        # core logic for synchronous action call
         future = self.kinova_move_to_client.send_goal_async(goal)
-
         rclpy.spin_until_future_complete(self, future)
-
         result_future = self._goal_response_callback(future)
-
         rclpy.spin_until_future_complete(self, result_future)
-
         result: MoveTo.Result = self._result_callback(result_future)
 
         self.get_logger().debug(

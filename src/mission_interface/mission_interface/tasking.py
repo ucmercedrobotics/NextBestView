@@ -85,10 +85,6 @@ class Condition:
         self.value: float | str | bool = value
 
 
-TRUE_BRANCH_IDX: int = 0
-FALSE_BRANCH_IDX: int = 1
-
-
 class TaskLeaf:
     """
     Base object for defining task:
@@ -223,6 +219,7 @@ class GoToPositionLeaf(ActionLeaf):
         sc = si * ck
         ss = si * sk
 
+        # returns x, y, z, w
         return (
             cj * sc - sj * cs,
             cj * ss + sj * cc,
@@ -302,6 +299,7 @@ class NextBestViewLeaf(ActionLeaf):
         return out
 
 
+# constructor dictionary so other modules don't need to import and can remain code agnostic
 TASK_CONSTRUCTORS: dict = {
     "goToPosition": GoToPositionLeaf,
     "identifyObject": IdentifyObjectLeaf,

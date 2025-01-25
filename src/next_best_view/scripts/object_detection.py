@@ -10,7 +10,7 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TransformStamped
 import tf2_ros
 from scipy.spatial.transform import Rotation
 from tf2_geometry_msgs import do_transform_pose_stamped
@@ -42,19 +42,22 @@ class ObjectDetectionNode(Node):
         self._latest_frames: dict = None
         self._frames_lock: Lock = Lock()
 
+        # image topics
         self._color_sub: Subscriber = Subscriber(self, Image, "/camera/color/image_raw")
         self._depth_sub: Subscriber = Subscriber(self, Image, "/camera/depth/image_raw")
+        # Synchronized subscribers
         self._time_sync: ApproximateTimeSynchronizer = ApproximateTimeSynchronizer(
             [
                 self._color_sub,
                 self._depth_sub,
-            ],  # Synchronized subscribers
+            ],
             30,
-            0.5,  # defines the delay (in seconds) with which messages can be synchronized
+            0.5,
         )
+        # sync this function
         self._time_sync.registerCallback(self.sync_callback)
 
-        # Initialize tf2 buffer and listener
+        # Initialize tf2 buffer and listener for transforms
         self._tf_buffer: tf2_ros.Buffer = tf2_ros.Buffer()
         self._tf_listener: tf2_ros.TransformListener = tf2_ros.TransformListener(
             self._tf_buffer, self
@@ -209,17 +212,32 @@ class ObjectDetectionNode(Node):
             "base_link", "end_effector_link", rclpy.time.Time()
         )
 
+        quaternion: np.array = self._compute_orientation(transform_ee)
+
+        result.view_position.orientation.x = quaternion[0]
+        result.view_position.orientation.y = quaternion[1]
+        result.view_position.orientation.z = quaternion[2]
+        result.view_position.orientation.w = quaternion[3]
+
+        return result
+
+    def _compute_orientation(
+        self,
+        base_to_ee_transform: TransformStamped,
+        object_in_base_frame: PoseStamped,
+        object_view_point: PoseStamped,
+    ) -> np.array:
         # Extract rotation (quaternion)
         end_effector_quat = [
-            transform_ee.transform.rotation.x,
-            transform_ee.transform.rotation.y,
-            transform_ee.transform.rotation.z,
-            transform_ee.transform.rotation.w,
+            base_to_ee_transform.transform.rotation.x,
+            base_to_ee_transform.transform.rotation.y,
+            base_to_ee_transform.transform.rotation.z,
+            base_to_ee_transform.transform.rotation.w,
         ]
 
         # print(f"end_effector_quat= x:{end_effector_quat[0]}, y:{end_effector_quat[1]}, z:{end_effector_quat[2]}, w:{end_effector_quat[3]} ")
 
-        end_effector_rotation = Rotation.from_quat(end_effector_quat)
+        end_effector_rotation: Rotation = Rotation.from_quat(end_effector_quat)
 
         # print(f"end_effector_rotation= {end_effector_rotation.as_matrix()}")
 
@@ -257,21 +275,12 @@ class ObjectDetectionNode(Node):
         I = np.eye(3)
         R_align = I + np.sin(theta) * K + np.dot(K, K) * (1 - np.cos(theta))
 
-        ######################################################
-        # R_new = np.dot(R_align, end_effector_rotation.as_matrix())
+        rotation: Rotation = Rotation.from_matrix(R_align)
+        quaternion: np.array = rotation.as_quat()
 
-        # rotation = Rotation.from_matrix(R_new)
-        rotation = Rotation.from_matrix(R_align)
-        quaternion = rotation.as_quat()
+        self.get_logger().debug(f"quaternion of alligned end_effector = {quaternion}")
 
-        print(f"quaternion of alligned end_effector = {quaternion}")
-
-        result.view_position.orientation.x = quaternion[0]
-        result.view_position.orientation.y = quaternion[1]
-        result.view_position.orientation.z = quaternion[2]
-        result.view_position.orientation.w = quaternion[3]
-
-        return result
+        return quaternion
 
     def _yolo_object_detection(self, frames: dict, target_class: str) -> list[dict]:
         """Detect object using YOLOv11 from BGR image frame and compute depth
