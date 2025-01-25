@@ -74,3 +74,6 @@ mission-interface:
 
 detect-object:
 	ros2 run next_best_view object_detection.py
+
+moveto:
+	ros2 launch next_best_view moveto.launch.py

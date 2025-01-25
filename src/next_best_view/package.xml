@@ -14,7 +14,6 @@
   <depend>rclcpp</depend>
   <depend>moveit_ros_planning_interface</depend>
   <depend>kinova_action_interfaces</depend>
-
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_copyright</test_depend>

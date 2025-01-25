@@ -10,8 +10,16 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from sensor_msgs.msg import Image
+from geometry_msgs.msg import PoseStamped, TransformStamped
+import tf2_ros
+from scipy.spatial.transform import Rotation
+from tf2_geometry_msgs import do_transform_pose_stamped
 
 from kinova_action_interfaces.action import DetectObject
+
+from geometry_msgs.msg import PointStamped
+import tf2_ros
+from tf2_geometry_msgs import do_transform_point
 
 
 METER_TO_MILLIMETER: float = 1000.0
@@ -21,47 +29,61 @@ class ObjectDetectionNode(Node):
     def __init__(self):
         super().__init__("object_detection_node")
 
-        self.debug: bool = True
+        self._debug: bool = True
 
         # Load YOLO model
-        self.model: YOLO = YOLO("yolo11n.pt")
+        self._model: YOLO = YOLO("yolo11n.pt")
 
         # Create action server
-        self._action_server = ActionServer(
+        self._action_server: ActionServer = ActionServer(
             self,
             DetectObject,
-            "detect_object",
+            "/next_best_view/detect_object",
             self.detect_object_callback,
         )
 
         # Latest synchronized images storage with thread safety
-        self.latest_frames = None
-        self.frames_lock = Lock()
+        self._latest_frames: dict = None
+        self._frames_lock: Lock = Lock()
 
-        self._color_sub = Subscriber(self, Image, "/camera/color/image_raw")
-        self._depth_sub = Subscriber(self, Image, "/camera/depth/image_raw")
-        self._time_sync = ApproximateTimeSynchronizer(
+        # image topics
+        self._color_sub: Subscriber = Subscriber(self, Image, "/camera/color/image_raw")
+        self._depth_sub: Subscriber = Subscriber(self, Image, "/camera/depth/image_raw")
+        # Synchronized subscribers
+        self._time_sync: ApproximateTimeSynchronizer = ApproximateTimeSynchronizer(
             [
                 self._color_sub,
                 self._depth_sub,
-            ],  # Synchronized subscribers
+            ],
             30,
-            0.5,  # defines the delay (in seconds) with which messages can be synchronized
+            0.5,
         )
+        # sync this function
         self._time_sync.registerCallback(self.sync_callback)
+
+        # Initialize tf2 buffer and listener for transforms
+        self._tf_buffer: tf2_ros.Buffer = tf2_ros.Buffer()
+        self._tf_listener: tf2_ros.TransformListener = tf2_ros.TransformListener(
+            self._tf_buffer, self
+        )
 
         self.get_logger().info("Object Detection Node has been started")
 
-    def sync_callback(self, color: Image, depth: Image):
-        """Callback for synchronized BGR and depth images"""
+    def sync_callback(self, color: Image, depth: Image) -> None:
+        """Callback for synchronized BGR and depth images
+
+        Args:
+            color (Image): BGR image
+            depth (Image): depth image
+        """
         try:
             # Convert ROS Image messages to OpenCV format
             bgr_image = self._imgmsg_to_cv2(color, desired_encoding="bgr8")
             depth_image = self._imgmsg_to_cv2(depth, desired_encoding="16UC1")
 
             # Store synchronized frames with thread safety
-            with self.frames_lock:
-                self.latest_frames = {
+            with self._frames_lock:
+                self._latest_frames = {
                     "bgr": bgr_image,
                     "depth": depth_image,
                 }
@@ -69,7 +91,7 @@ class ObjectDetectionNode(Node):
         except Exception as e:
             self.get_logger().error(f"Error processing synchronized frames: {str(e)}")
 
-    async def detect_object_callback(self, goal_handle):
+    async def detect_object_callback(self, goal_handle) -> DetectObject.Result:
         """Action server callback to process detection requests"""
         self.get_logger().info("Received detection request")
 
@@ -79,13 +101,14 @@ class ObjectDetectionNode(Node):
 
         # Get the target class from the goal
         target_class: str = goal_handle.request.target_class
+        target_view_point_distance: str = goal_handle.request.target_view_point_distance
         # TODO: add colors here
 
         # Get latest synchronized frames with thread safety
-        with self.frames_lock:
-            if self.latest_frames is None:
+        with self._frames_lock:
+            if self._latest_frames is None:
                 raise RuntimeError("No synchronized frame data available")
-            frames = self.latest_frames.copy()
+            frames = self._latest_frames.copy()
 
         try:
             detections = self._yolo_object_detection(frames, target_class)
@@ -98,19 +121,30 @@ class ObjectDetectionNode(Node):
 
                 X, Y, Z = self._compute_3d_position(best_detection)
 
-                # Set result
-                result.success = True
-                result.position.x = float(X)
-                result.position.y = float(Y)
-                result.position.z = float(Z)
-                result.confidence = best_detection["confidence"]
+                try:
+                    result = self._camera_to_base_link_transform(
+                        X, Y, Z, target_view_point_distance
+                    )
 
-                # Send feedback
-                feedback_msg.processing_status = (
-                    f"Object detected at ({X:.2f}, {Y:.2f}, {Z:.2f}) "
-                    f"with confidence: {result.confidence:.2f}"
-                )
-                goal_handle.publish_feedback(feedback_msg)
+                    result.confidence = best_detection["confidence"]
+                    result.success = True
+
+                    feedback_msg.processing_status = (
+                        f"Object detected at base_link coordinates "
+                        f"({result.object_position.x:.2f}, {result.object_position.y:.2f}, {result.object_position.z:.2f}) "
+                        f"({result.view_position.position.x:.2f}, {result.view_position.position.y:.2f}, {result.view_position.position.z:.2f}) "
+                        f"({result.view_position.orientation.x:.2f}, {result.view_position.orientation.y:.2f}, {result.view_position.orientation.z:.2f}), {result.view_position.orientation.w:.2f})"
+                        f"with confidence: {result.confidence:.2f}"
+                    )
+                    goal_handle.publish_feedback(feedback_msg)
+                except Exception as e:
+                    self.get_logger().error(f"TF Transform failed: {str(e)}")
+                    result.success = False
+                    result.confidence = 0.0
+                    feedback_msg.processing_status = (
+                        "Failed to transform object position to base_link"
+                    )
+                    goal_handle.publish_feedback(feedback_msg)
 
             else:
                 result.success = False
@@ -120,7 +154,7 @@ class ObjectDetectionNode(Node):
 
             goal_handle.succeed()
 
-            if self.debug == True:  # Print debug images
+            if self._debug == True:  # Print debug images
                 annotated_image = self._draw_detections(
                     frames["bgr"].copy(), detections, target_class
                 )
@@ -134,9 +168,136 @@ class ObjectDetectionNode(Node):
 
         return result
 
-    def _yolo_object_detection(self, frames, target_class) -> list[dict]:
+    def _camera_to_base_link_transform(
+        self, X: float, Y: float, Z: float, target_view_point_distance: float
+    ) -> DetectObject.Result:
+        """This function converts an incoming 3D point with respect to camera_link to base_link
+
+        Args:
+            X (float): X coordinate
+            Y (float): Y coordinate
+            Z (float): Z coordinate
+            target_view_point_distance (float): how far the camera is desired from object
+
+        Returns:
+            DetectObject.Result: ROS2 message result type for DetectObject
+        """
+        result: DetectObject.Result = DetectObject.Result()
+
+        # Transform the object position from camera_link to base_link
+        object_in_camera_frame = PoseStamped()
+        object_in_camera_frame.pose.position.x = X
+        object_in_camera_frame.pose.position.y = Y
+        object_in_camera_frame.pose.position.z = Z
+
+        object_view_point = PoseStamped()
+        object_view_point.pose.position.x = X
+        object_view_point.pose.position.y = Y
+        object_view_point.pose.position.z = Z - target_view_point_distance
+
+        transform = self._tf_buffer.lookup_transform(
+            "base_link", "camera_link", rclpy.time.Time()
+        )
+        object_in_base_frame = do_transform_pose_stamped(
+            object_in_camera_frame, transform
+        )
+
+        result.object_position.x = object_in_base_frame.pose.position.x
+        result.object_position.y = object_in_base_frame.pose.position.y
+        result.object_position.z = object_in_base_frame.pose.position.z
+
+        object_view_point_in_base_frame = do_transform_pose_stamped(
+            object_view_point, transform
+        )
+
+        result.view_position = object_view_point_in_base_frame.pose
+
+        transform_ee = self._tf_buffer.lookup_transform(
+            "base_link", "end_effector_link", rclpy.time.Time()
+        )
+
+        quaternion: np.array = self._compute_orientation(transform_ee)
+
+        result.view_position.orientation.x = quaternion[0]
+        result.view_position.orientation.y = quaternion[1]
+        result.view_position.orientation.z = quaternion[2]
+        result.view_position.orientation.w = quaternion[3]
+
+        return result
+
+    def _compute_orientation(
+        self,
+        base_to_ee_transform: TransformStamped,
+        object_in_base_frame: PoseStamped,
+        object_view_point: PoseStamped,
+    ) -> np.array:
+        # Extract rotation (quaternion)
+        end_effector_quat = [
+            base_to_ee_transform.transform.rotation.x,
+            base_to_ee_transform.transform.rotation.y,
+            base_to_ee_transform.transform.rotation.z,
+            base_to_ee_transform.transform.rotation.w,
+        ]
+
+        # print(f"end_effector_quat= x:{end_effector_quat[0]}, y:{end_effector_quat[1]}, z:{end_effector_quat[2]}, w:{end_effector_quat[3]} ")
+
+        end_effector_rotation: Rotation = Rotation.from_quat(end_effector_quat)
+
+        # print(f"end_effector_rotation= {end_effector_rotation.as_matrix()}")
+
+        # Calculate direction vector
+        direction = np.array(
+            [
+                object_in_base_frame.pose.position.x
+                - object_view_point.pose.position.x,
+                object_in_base_frame.pose.position.y
+                - object_view_point.pose.position.y,
+                object_in_base_frame.pose.position.z
+                - object_view_point.pose.position.z,
+            ]
+        )
+
+        z_axis_target = direction / np.linalg.norm(direction)
+
+        z_axis_current = end_effector_rotation.as_matrix()[
+            :, 2
+        ]  # Third column is the current Z-axis
+
+        # Compute the axis of rotation (cross product)
+        axis = np.cross(z_axis_current, z_axis_target)
+        axis = axis / np.linalg.norm(axis)  # Normalize the rotation axis
+
+        # Compute the angle of rotation (dot product)
+        cos_theta = np.dot(z_axis_current, z_axis_target)
+        theta = np.arccos(cos_theta)
+
+        # Rodrigues' rotation formula
+        K = np.array(
+            [[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]]
+        )
+
+        I = np.eye(3)
+        R_align = I + np.sin(theta) * K + np.dot(K, K) * (1 - np.cos(theta))
+
+        rotation: Rotation = Rotation.from_matrix(R_align)
+        quaternion: np.array = rotation.as_quat()
+
+        self.get_logger().debug(f"quaternion of alligned end_effector = {quaternion}")
+
+        return quaternion
+      
+    def _yolo_object_detection(self, frames: dict, target_class: str) -> list[dict]:
+        """Detect object using YOLOv11 from BGR image frame and compute depth
+
+        Args:
+            frames (dict): incoming BGR and depth frames
+            target_class (str): object name
+
+        Returns:
+            list[dict]: confidence, bounding box, BGR center, depth center, depth
+        """
         # Run YOLOv11 detection on BGR image
-        results = self.model(frames["bgr"])
+        results = self._model(frames["bgr"])
 
         # Get image dimensions
         bgr_h, bgr_w = frames["bgr"].shape[:2]
@@ -154,7 +315,7 @@ class ObjectDetectionNode(Node):
             boxes = r.boxes
             for box in boxes:
                 cls = int(box.cls[0])
-                cls_name = self.model.names[cls]
+                cls_name = self._model.names[cls]
 
                 # if one of the objects is what you were looking for
                 if target_class.lower() in cls_name.lower():
@@ -195,7 +356,7 @@ class ObjectDetectionNode(Node):
 
         return detections
 
-    def _compute_3d_position(self, object) -> Tuple[float, float, float]:
+    def _compute_3d_position(self, object: dict) -> Tuple[float, float, float]:
         # Calculate 3D position
         # TODO: move these into some configuration for the camera or parse them from the /camera_info topic
         fx = 360.01333
