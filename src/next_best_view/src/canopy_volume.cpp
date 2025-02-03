@@ -5,6 +5,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/surface/convex_hull.h>
+#include <pcl/visualization/pcl_visualizer.h>
 
 #include <iostream>
 #include <rclcpp/rclcpp.hpp>
@@ -34,6 +35,25 @@ class CanopyVolumeNode : public rclcpp::Node {
     // Calculate the canopy volume
     double volume = calculateConvexHullVolume(canopy_cloud);
     RCLCPP_INFO(this->get_logger(), "Canopy Volume: %.4f cubic meters", volume);
+
+    // Calculate tree height
+    float tree_height = calculateTreeHeight(cloud);
+    RCLCPP_INFO(this->get_logger(), "Tree Height: %.4f meters", tree_height);
+
+    // Calculate canopy diameter
+    float canopy_diameter = calculateCanopyDiameter(canopy_cloud);
+    RCLCPP_INFO(this->get_logger(), "Canopy Diameter: %.4f meters",
+                canopy_diameter);
+
+    // Calculate canopy area
+    float canopy_area = calculateCanopyArea(canopy_cloud);
+    RCLCPP_INFO(this->get_logger(), "Canopy Area: %.4f square meters",
+                canopy_area);
+
+    // Calculate canopy density
+    float canopy_density = calculateCanopyDensity(canopy_cloud, volume);
+    RCLCPP_INFO(this->get_logger(),
+                "Canopy Density: %.4f points per cubic meter", canopy_density);
   }
 
  private:
@@ -83,6 +103,67 @@ class CanopyVolumeNode : public rclcpp::Node {
     // Normalize the volume
     volume /= cloud->size();
     return volume;
+  }
+
+  // Function to calculate tree height
+  float calculateTreeHeight(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud) {
+    float min_z = std::numeric_limits<float>::max();
+    float max_z = std::numeric_limits<float>::min();
+
+    for (const auto& point : *cloud) {
+      if (point.z < min_z) min_z = point.z;
+      if (point.z > max_z) max_z = point.z;
+    }
+
+    return max_z - min_z;
+  }
+
+  // Function to calculate canopy diameter
+  float calculateCanopyDiameter(
+      const pcl::PointCloud<pcl::PointXYZ>::Ptr& canopy_cloud) {
+    float max_diameter = 0.0;
+
+    for (size_t i = 0; i < canopy_cloud->size(); ++i) {
+      for (size_t j = i + 1; j < canopy_cloud->size(); ++j) {
+        float dx = canopy_cloud->points[i].x - canopy_cloud->points[j].x;
+        float dy = canopy_cloud->points[i].y - canopy_cloud->points[j].y;
+        float distance = std::sqrt(dx * dx + dy * dy);
+        if (distance > max_diameter) {
+          max_diameter = distance;
+        }
+      }
+    }
+
+    return max_diameter;
+  }
+
+  // Function to calculate canopy area
+  float calculateCanopyArea(
+      const pcl::PointCloud<pcl::PointXYZ>::Ptr& canopy_cloud) {
+    pcl::ConvexHull<pcl::PointXYZ> hull;
+    hull.setInputCloud(canopy_cloud);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr hull_cloud(
+        new pcl::PointCloud<pcl::PointXYZ>);
+    hull.reconstruct(*hull_cloud);
+
+    float area = 0.0;
+    for (size_t i = 1; i < hull_cloud->size() - 1; ++i) {
+      float x1 = hull_cloud->points[i].x - hull_cloud->points[0].x;
+      float y1 = hull_cloud->points[i].y - hull_cloud->points[0].y;
+      float x2 = hull_cloud->points[i + 1].x - hull_cloud->points[0].x;
+      float y2 = hull_cloud->points[i + 1].y - hull_cloud->points[0].y;
+      area += (x1 * y2 - x2 * y1);
+    }
+    area = std::abs(area) / 2.0;
+
+    return area;
+  }
+
+  // Function to calculate canopy density
+  float calculateCanopyDensity(
+      const pcl::PointCloud<pcl::PointXYZ>::Ptr& canopy_cloud, double volume) {
+    if (volume <= 0.0) return 0.0;
+    return canopy_cloud->size() / volume;
   }
 };
 
