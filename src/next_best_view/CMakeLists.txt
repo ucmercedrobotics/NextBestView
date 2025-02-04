@@ -62,6 +62,7 @@ add_executable(point_cloud_saver src/point_cloud_saver.cpp)
 add_executable(create_point_cloud2 src/create_point_cloud2.cpp)
 add_executable(merge_point_clouds src/merge_point_clouds.cpp)
 add_executable(canopy_volume src/canopy_volume.cpp)
+add_executable(point_cloud_publisher src/point_cloud_publisher.cpp)
 
 
 
@@ -90,6 +91,10 @@ target_include_directories(merge_point_clouds PUBLIC
   $<INSTALL_INTERFACE:include>)
 
 target_include_directories(canopy_volume PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+
+target_include_directories(point_cloud_publisher PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
@@ -202,6 +207,25 @@ ament_target_dependencies(
 
 )
 
+target_compile_features(point_cloud_publisher PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+ament_target_dependencies(
+  point_cloud_publisher
+  "rclcpp"
+  "std_msgs"
+  "sensor_msgs"
+  "pcl_conversions"
+  "pcl_ros"
+  "PCL"
+  "message_filters"
+  "cv_bridge"
+  "tf2"
+  "tf2_ros"
+  "geometry_msgs"
+  "OpenCV"
+  "tf2_sensor_msgs"
+
+)
+
 install(TARGETS hello_moveit
   DESTINATION lib/${PROJECT_NAME})
 
@@ -223,6 +247,9 @@ install(TARGETS merge_point_clouds
 install(TARGETS canopy_volume
   DESTINATION lib/${PROJECT_NAME})
 
+install(TARGETS point_cloud_publisher
+  DESTINATION lib/${PROJECT_NAME})
+
 # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
@@ -235,6 +262,7 @@ DESTINATION lib/${PROJECT_NAME}
 # Install launch files.
 install(DIRECTORY
   launch
+  point_clouds
   DESTINATION share/${PROJECT_NAME}/
 )
 

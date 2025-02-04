@@ -285,7 +285,7 @@ class ObjectDetectionNode(Node):
         self.get_logger().debug(f"quaternion of alligned end_effector = {quaternion}")
 
         return quaternion
-      
+
     def _yolo_object_detection(self, frames: dict, target_class: str) -> list[dict]:
         """Detect object using YOLOv11 from BGR image frame and compute depth
 

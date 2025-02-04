@@ -46,7 +46,7 @@ class NextBestViewServer : public rclcpp::Node {
 
     // Create action server
     action_server_ = rclcpp_action::create_server<Nbv>(
-        this, "next_best_view",
+        this, "next_best_view/next_best_view",
         std::bind(&NextBestViewServer::handle_goal, this, std::placeholders::_1,
                   std::placeholders::_2),
         std::bind(&NextBestViewServer::handle_cancel, this,

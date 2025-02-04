@@ -64,7 +64,7 @@ class CanopyVolumeNode : public rclcpp::Node {
     pcl::PassThrough<pcl::PointXYZ> pass;
     pass.setInputCloud(cloud);
     pass.setFilterFieldName("z");     // Filter along the Z-axis (height)
-    pass.setFilterLimits(0.01, 0.4);  // Adjust these limits based on your data
+    pass.setFilterLimits(0.00, 0.6);  // Adjust these limits based on your data
     pcl::PointCloud<pcl::PointXYZ>::Ptr upper_cloud(
         new pcl::PointCloud<pcl::PointXYZ>);
     pass.filter(*upper_cloud);

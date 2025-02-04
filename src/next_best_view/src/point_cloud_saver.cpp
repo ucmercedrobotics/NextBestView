@@ -32,7 +32,8 @@ class PointCloudSaverNode : public rclcpp::Node {
 
     // Set the save directory (change this to your desired path)
     save_directory_ =
-        "/home/mmelihtoslak/NextBestView/src/next_best_view/point_clouds/";
+        "/home/mmelihtoslak/NextBestView_final/NextBestView/src/next_best_view/"
+        "point_clouds/";
 
     // Initialize TF2 buffer and listener
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
