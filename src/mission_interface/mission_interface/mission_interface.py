@@ -18,6 +18,8 @@ from .tasking import (
 )
 from kinova_action_interfaces.action import DetectObject, MoveTo, NextBestView
 from geometry_msgs.msg import Point
+from std_msgs.msg import Float32
+
 
 NODE_NAME: str = "kinova_mission_interface"
 
@@ -82,6 +84,8 @@ class MissionInterface(Node):
 
         # A member variable to store the last detected object position
         self.last_detected_object_position: Point = None
+        # A member variable to store the distance
+        self.distance_nbv: Float32 = None
 
     def run(self) -> bool:
         bytes_received, temp_xml_path = self.nic.receive_file()
@@ -145,6 +149,9 @@ class MissionInterface(Node):
         goal.colors = task.colors
         goal.target_view_point_distance = task.object_distance
 
+        # Here we got the object object location
+        self.distance_nbv = goal.target_view_poin_distance
+
         self.detect_object_client.wait_for_server()
         self.get_logger().info(
             f"Detect Object Action server available. Sending goal to find {goal.target_class}..."
@@ -182,7 +189,7 @@ class MissionInterface(Node):
     def _send_nbv_goal(self, task: NextBestViewLeaf) -> bool:
         goal: NextBestView.Goal = NextBestView.Goal()
         goal.location_number = task.location_number
-        goal.distance = task.distance
+        goal.distance = self.distance_nbv
 
         # Use the stored object position
         if self.last_detected_object_position is not None:
