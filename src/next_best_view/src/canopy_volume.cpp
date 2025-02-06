@@ -15,7 +15,7 @@ class CanopyVolumeNode : public rclcpp::Node {
   CanopyVolumeNode() : Node("canopy_volume_node") {
     // Define the path to the PCD file
     std::string pcd_file =
-        "/home/mmelihtoslak/NextBestView_final/NextBestView/src/next_best_view/"
+        "src/next_best_view/"
         "point_clouds/merged_pointcloud.pcd";  // Update with your file name
 
     // Load the PCD file

@@ -150,7 +150,7 @@ class MissionInterface(Node):
         goal.target_view_point_distance = task.object_distance
 
         # Here we got the object object location
-        self.distance_nbv = goal.target_view_poin_distance
+        self.distance_nbv = goal.target_view_point_distance
 
         self.detect_object_client.wait_for_server()
         self.get_logger().info(
@@ -188,7 +188,7 @@ class MissionInterface(Node):
 
     def _send_nbv_goal(self, task: NextBestViewLeaf) -> bool:
         goal: NextBestView.Goal = NextBestView.Goal()
-        goal.location_number = task.location_number
+        goal.location_number = int(task.resolution)
         goal.distance = self.distance_nbv
 
         # Use the stored object position

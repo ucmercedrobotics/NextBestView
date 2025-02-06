@@ -10,17 +10,12 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PoseStamped, TransformStamped
-import tf2_ros
-from scipy.spatial.transform import Rotation
-from tf2_geometry_msgs import do_transform_pose_stamped
-
-from kinova_action_interfaces.action import DetectObject
-
-from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import TransformStamped, PointStamped
 import tf2_ros
 from tf2_geometry_msgs import do_transform_point
+from scipy.spatial.transform import Rotation
 
+from kinova_action_interfaces.action import DetectObject
 
 METER_TO_MILLIMETER: float = 1000.0
 
@@ -185,38 +180,40 @@ class ObjectDetectionNode(Node):
         result: DetectObject.Result = DetectObject.Result()
 
         # Transform the object position from camera_link to base_link
-        object_in_camera_frame = PoseStamped()
-        object_in_camera_frame.pose.position.x = X
-        object_in_camera_frame.pose.position.y = Y
-        object_in_camera_frame.pose.position.z = Z
+        object_in_camera_frame = PointStamped()
+        object_in_camera_frame.point.x = X
+        object_in_camera_frame.point.y = Y
+        object_in_camera_frame.point.z = Z
 
-        object_view_point = PoseStamped()
-        object_view_point.pose.position.x = X
-        object_view_point.pose.position.y = Y
-        object_view_point.pose.position.z = Z - target_view_point_distance
+        object_view_point = PointStamped()
+        object_view_point.point.x = X
+        object_view_point.point.y = Y
+        object_view_point.point.z = Z - target_view_point_distance
 
         transform = self._tf_buffer.lookup_transform(
             "base_link", "camera_link", rclpy.time.Time()
         )
-        object_in_base_frame = do_transform_pose_stamped(
-            object_in_camera_frame, transform
-        )
+        object_in_base_frame = do_transform_point(object_in_camera_frame, transform)
 
-        result.object_position.x = object_in_base_frame.pose.position.x
-        result.object_position.y = object_in_base_frame.pose.position.y
-        result.object_position.z = object_in_base_frame.pose.position.z
+        result.object_position.x = object_in_base_frame.point.x
+        result.object_position.y = object_in_base_frame.point.y
+        result.object_position.z = object_in_base_frame.point.z
 
-        object_view_point_in_base_frame = do_transform_pose_stamped(
+        object_view_point_in_base_frame = do_transform_point(
             object_view_point, transform
         )
 
-        result.view_position = object_view_point_in_base_frame.pose
+        result.view_position.position.x = object_view_point_in_base_frame.point.x
+        result.view_position.position.y = object_view_point_in_base_frame.point.y
+        result.view_position.position.z = object_view_point_in_base_frame.point.z
 
         transform_ee = self._tf_buffer.lookup_transform(
             "base_link", "end_effector_link", rclpy.time.Time()
         )
 
-        quaternion: np.array = self._compute_orientation(transform_ee)
+        quaternion: np.array = self._compute_orientation(
+            transform_ee, object_in_base_frame, object_view_point
+        )
 
         result.view_position.orientation.x = quaternion[0]
         result.view_position.orientation.y = quaternion[1]
@@ -228,8 +225,8 @@ class ObjectDetectionNode(Node):
     def _compute_orientation(
         self,
         base_to_ee_transform: TransformStamped,
-        object_in_base_frame: PoseStamped,
-        object_view_point: PoseStamped,
+        object_in_base_frame: PointStamped,
+        object_view_point: PointStamped,
     ) -> np.array:
         # Extract rotation (quaternion)
         end_effector_quat = [
@@ -248,12 +245,9 @@ class ObjectDetectionNode(Node):
         # Calculate direction vector
         direction = np.array(
             [
-                object_in_base_frame.pose.position.x
-                - object_view_point.pose.position.x,
-                object_in_base_frame.pose.position.y
-                - object_view_point.pose.position.y,
-                object_in_base_frame.pose.position.z
-                - object_view_point.pose.position.z,
+                object_view_point.point.x - object_in_base_frame.point.x,
+                object_view_point.point.y - object_in_base_frame.point.y,
+                object_view_point.point.z - object_in_base_frame.point.z,
             ]
         )
 

@@ -262,7 +262,6 @@ DESTINATION lib/${PROJECT_NAME}
 # Install launch files.
 install(DIRECTORY
   launch
-  point_clouds
   DESTINATION share/${PROJECT_NAME}/
 )
 

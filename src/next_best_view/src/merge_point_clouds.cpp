@@ -14,7 +14,7 @@ class PointCloudMergerNode : public rclcpp::Node {
   PointCloudMergerNode() : Node("pointcloud_merger_node") {
     // Set the directory containing the saved point clouds
     save_directory_ =
-        "/home/mmelihtoslak/NextBestView_final/NextBestView/src/next_best_view/"
+        "src/next_best_view/"
         "point_clouds/";
 
     // Set the output file name for the merged point cloud

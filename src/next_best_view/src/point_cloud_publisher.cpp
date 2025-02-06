@@ -27,7 +27,7 @@ class PointCloudPublisher : public rclcpp::Node {
 
     // Replace with your actual .pcd file path
     if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(
-            "/home/mmelihtoslak/NextBestView_final/NextBestView/src/"
+            "src/"
             "next_best_view/point_clouds/merged_pointcloud.pcd",
             *cloud) == -1) {
       RCLCPP_ERROR(this->get_logger(), "Couldn't read PCD file");

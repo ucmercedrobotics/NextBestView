@@ -2,7 +2,6 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>  // For transforming individual points
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
@@ -11,6 +10,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>  // For transforming individual points
 
 class PointCloudSaverNode : public rclcpp::Node {
  public:
@@ -32,7 +32,7 @@ class PointCloudSaverNode : public rclcpp::Node {
 
     // Set the save directory (change this to your desired path)
     save_directory_ =
-        "/home/mmelihtoslak/NextBestView_final/NextBestView/src/next_best_view/"
+        "src/next_best_view/"
         "point_clouds/";
 
     // Initialize TF2 buffer and listener
