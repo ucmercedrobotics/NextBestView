@@ -2,21 +2,24 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>  // For transforming individual points
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
+#include <filesystem>  // C++17 filesystem library
 #include <fstream>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/bool.hpp>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>  // For transforming individual points
+
+namespace fs = std::filesystem;
 
 class PointCloudSaverNode : public rclcpp::Node {
  public:
   PointCloudSaverNode() : Node("pointcloud_saver_node"), save_data_(false) {
     // Define QoS settings to match the publisher (best-effort)
-    auto qos = rclcpp::QoS(rclcpp::KeepLast(10)).best_effort();
+    auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort();
 
     // Subscribe to the PointCloud2 topic with the defined QoS
     pointcloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
@@ -30,10 +33,23 @@ class PointCloudSaverNode : public rclcpp::Node {
         std::bind(&PointCloudSaverNode::triggerCallback, this,
                   std::placeholders::_1));
 
-    // Set the save directory (change this to your desired path)
-    save_directory_ =
-        "src/next_best_view/"
-        "point_clouds/";
+    // Set the save directory to one level up in a folder named "point_clouds"
+    std::string relative_save_dir = "src/next_best_view/point_clouds";
+    if (!fs::exists(relative_save_dir)) {
+      // Create the directory if it does not exist
+      if (fs::create_directory(relative_save_dir)) {
+        RCLCPP_INFO(this->get_logger(), "Created directory: %s",
+                    relative_save_dir.c_str());
+      } else {
+        RCLCPP_ERROR(this->get_logger(), "Failed to create directory: %s",
+                     relative_save_dir.c_str());
+      }
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Directory already exists: %s",
+                  relative_save_dir.c_str());
+    }
+    // Append a trailing slash (if desired)
+    save_directory_ = relative_save_dir + "/";
 
     // Initialize TF2 buffer and listener
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());

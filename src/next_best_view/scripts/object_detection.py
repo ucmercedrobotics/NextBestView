@@ -228,21 +228,25 @@ class ObjectDetectionNode(Node):
         object_in_base_frame: PointStamped,
         object_view_point: PointStamped,
     ) -> np.array:
-        # Extract rotation (quaternion)
-        end_effector_quat = [
+
+        # Compute end effector orientation with following constraints:
+        # 1. Z-axis aligned with direction vector (camera looking at object)
+        # 2. X-axis parallel to x-y plane of the base
+        # 3. Y-axis pointing towards positive Z of base frame
+
+        # Takes into account current end effector orientation relative to base frame.
+
+        # Get current end effector orientation
+        current_ee_quat = [
             base_to_ee_transform.transform.rotation.x,
             base_to_ee_transform.transform.rotation.y,
             base_to_ee_transform.transform.rotation.z,
             base_to_ee_transform.transform.rotation.w,
         ]
+        current_ee_rotation = Rotation.from_quat(current_ee_quat)
+        current_ee_matrix = current_ee_rotation.as_matrix()
 
-        # print(f"end_effector_quat= x:{end_effector_quat[0]}, y:{end_effector_quat[1]}, z:{end_effector_quat[2]}, w:{end_effector_quat[3]} ")
-
-        end_effector_rotation: Rotation = Rotation.from_quat(end_effector_quat)
-
-        # print(f"end_effector_rotation= {end_effector_rotation.as_matrix()}")
-
-        # Calculate direction vector
+        # Calculate desired direction vector (this will be our new z-axis)
         direction = np.array(
             [
                 object_view_point.point.x - object_in_base_frame.point.x,
@@ -251,32 +255,51 @@ class ObjectDetectionNode(Node):
             ]
         )
 
-        z_axis_target = direction / np.linalg.norm(direction)
+        # Normalize z-axis
+        z_axis = direction / np.linalg.norm(direction)
 
-        z_axis_current = end_effector_rotation.as_matrix()[
-            :, 2
-        ]  # Third column is the current Z-axis
+        # Define base frame's up vector (positive Z)
+        base_up = np.array([0, 0, 1])
 
-        # Compute the axis of rotation (cross product)
-        axis = np.cross(z_axis_current, z_axis_target)
-        axis = axis / np.linalg.norm(axis)  # Normalize the rotation axis
+        # Compute y-axis using cross product of z-axis and base_up
+        # This ensures y-axis is perpendicular to both z-axis and base_up
+        y_axis = np.cross(z_axis, base_up)
 
-        # Compute the angle of rotation (dot product)
-        cos_theta = np.dot(z_axis_current, z_axis_target)
-        theta = np.arccos(cos_theta)
+        # Handle the case where z_axis is parallel to base_up
+        if np.linalg.norm(y_axis) < 1e-6:
+            # Use current end effector x-axis projected onto xy-plane
+            y_axis = current_ee_matrix[:, 1]  # Use current y-axis as initial guess
+            y_axis[2] = 0  # Project onto xy-plane
+            if np.linalg.norm(y_axis) < 1e-6:
+                y_axis = np.array([1, 0, 0])  # Fallback if projection is too small
 
-        # Rodrigues' rotation formula
-        K = np.array(
-            [[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]]
+        y_axis = y_axis / np.linalg.norm(y_axis)
+
+        # Compute x-axis to complete the right-handed coordinate system
+        x_axis = np.cross(y_axis, z_axis)
+        x_axis = x_axis / np.linalg.norm(x_axis)
+
+        # Project x-axis onto xy-plane and normalize
+        x_axis_proj = np.array([x_axis[0], x_axis[1], 0])
+        if np.linalg.norm(x_axis_proj) > 1e-6:  # Check if projection is not too small
+            x_axis = x_axis_proj / np.linalg.norm(x_axis_proj)
+            # Recompute y-axis to maintain orthogonality
+            y_axis = np.cross(z_axis, x_axis)
+            y_axis = y_axis / np.linalg.norm(y_axis)
+
+        # Construct desired rotation matrix from the three axes
+        desired_rotation_matrix = np.column_stack((x_axis, y_axis, z_axis))
+
+        # Compute the relative rotation from current to desired orientation
+        relative_rotation = desired_rotation_matrix @ current_ee_matrix.T
+
+        # Convert to quaternion
+        rotation = Rotation.from_matrix(relative_rotation)
+        quaternion = rotation.as_quat()
+
+        self.get_logger().debug(
+            f"Final quaternion of aligned end_effector = {quaternion}"
         )
-
-        I = np.eye(3)
-        R_align = I + np.sin(theta) * K + np.dot(K, K) * (1 - np.cos(theta))
-
-        rotation: Rotation = Rotation.from_matrix(R_align)
-        quaternion: np.array = rotation.as_quat()
-
-        self.get_logger().debug(f"quaternion of alligned end_effector = {quaternion}")
 
         return quaternion
 

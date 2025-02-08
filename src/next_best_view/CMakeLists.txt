@@ -52,6 +52,8 @@ find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(message_filters REQUIRED)
+find_package(rcpputils REQUIRED)
+
 
 
 
@@ -146,6 +148,8 @@ ament_target_dependencies(
   "tf2_sensor_msgs"
   "tf2"
   "tf2_ros"
+  "rcpputils"
+
 
 
 )

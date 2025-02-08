@@ -77,3 +77,6 @@ detect-object:
 
 moveto:
 	ros2 launch next_best_view moveto.launch.py
+
+one4all:
+	ros2 launch next_best_view llm_planning.launch.py

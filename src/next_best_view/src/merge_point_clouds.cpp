@@ -9,18 +9,41 @@
 #include <string>
 #include <vector>
 
+// Create an alias for the filesystem namespace for brevity.
+namespace fs = std::filesystem;
+
 class PointCloudMergerNode : public rclcpp::Node {
  public:
   PointCloudMergerNode() : Node("pointcloud_merger_node") {
-    // Set the directory containing the saved point clouds
-    save_directory_ =
-        "src/next_best_view/"
-        "point_clouds/";
+    // Set the directory containing the individual saved point clouds
+    save_directory_ = "src/next_best_view/point_clouds/";
 
-    // Set the output file name for the merged point cloud
-    output_filename_ = save_directory_ + "merged_pointcloud.pcd";
+    // Set the directory where the merged point cloud will be saved (one level
+    // up)
+    merged_directory_ = "src/next_best_view/merged_pointclouds/";
 
-    // Merge all point clouds in the directory
+    // Check if the merged directory exists; if not, create it.
+    if (!fs::exists(merged_directory_)) {
+      if (fs::create_directory(merged_directory_)) {
+        RCLCPP_INFO(this->get_logger(),
+                    "Created merged point clouds directory: %s",
+                    merged_directory_.c_str());
+      } else {
+        RCLCPP_ERROR(this->get_logger(),
+                     "Failed to create merged point clouds directory: %s",
+                     merged_directory_.c_str());
+      }
+    } else {
+      RCLCPP_INFO(this->get_logger(),
+                  "Merged point clouds directory already exists: %s",
+                  merged_directory_.c_str());
+    }
+
+    // Set the output file name for the merged point cloud in the merged
+    // directory
+    output_filename_ = merged_directory_ + "merged_pointcloud.pcd";
+
+    // Merge all point clouds from the source directory
     mergePointClouds();
   }
 
@@ -30,9 +53,8 @@ class PointCloudMergerNode : public rclcpp::Node {
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr merged_cloud(
         new pcl::PointCloud<pcl::PointXYZRGB>);
 
-    // Iterate over all files in the directory
-    for (const auto& entry :
-         std::filesystem::directory_iterator(save_directory_)) {
+    // Iterate over all files in the source directory (../point_clouds/)
+    for (const auto& entry : fs::directory_iterator(save_directory_)) {
       if (entry.path().extension() == ".pcd") {
         // Load the point cloud from the file
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(
@@ -59,7 +81,7 @@ class PointCloudMergerNode : public rclcpp::Node {
       return;
     }
 
-    // Save the merged point cloud to a file
+    // Save the merged point cloud to a file in the merged directory
     if (pcl::io::savePCDFileASCII(output_filename_, *merged_cloud) == -1) {
       RCLCPP_ERROR(this->get_logger(),
                    "Failed to save merged point cloud to: %s",
@@ -70,8 +92,10 @@ class PointCloudMergerNode : public rclcpp::Node {
     }
   }
 
-  std::string save_directory_;   // Directory containing the saved point clouds
-  std::string output_filename_;  // Output file name for the merged point cloud
+  std::string
+      save_directory_;  // Directory containing individual saved point clouds
+  std::string merged_directory_;  // Directory to store the merged point cloud
+  std::string output_filename_;   // Output file name for the merged point cloud
 };
 
 int main(int argc, char* argv[]) {
