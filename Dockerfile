@@ -13,7 +13,8 @@ COPY --from=builder /usr/local /usr/local
 RUN apt-get update && apt-get install -y git wget python3-pip vim net-tools netcat \
     python3-colcon-common-extensions python3-vcstool \
     gstreamer1.0-tools gstreamer1.0-libav libgstreamer1.0-dev \
-    libgstreamer-plugins-base1.0-dev libgstreamer-plugins-good1.0-dev gstreamer1.0-plugins-good gstreamer1.0-plugins-base
+    libgstreamer-plugins-base1.0-dev libgstreamer-plugins-good1.0-dev gstreamer1.0-plugins-good gstreamer1.0-plugins-base \
+    ros-humble-moveit-visual-tools ros-humble-pcl-conversions ros-humble-pcl-ros
 
 # config for cyclone -> needed for moveit
 RUN apt update && apt install ros-humble-rmw-cyclonedds-cpp -y

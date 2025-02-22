@@ -1,0 +1,10 @@
+# Request
+int32 location_number
+geometry_msgs/Point object_position
+float32 distance
+---
+# Result
+bool success
+---
+# Feedback
+string processing_status

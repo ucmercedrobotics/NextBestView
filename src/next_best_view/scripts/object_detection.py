@@ -10,17 +10,12 @@ from rclpy.node import Node
 from rclpy.action import ActionServer
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PoseStamped, TransformStamped
-import tf2_ros
-from scipy.spatial.transform import Rotation
-from tf2_geometry_msgs import do_transform_pose_stamped
-
-from kinova_action_interfaces.action import DetectObject
-
-from geometry_msgs.msg import PointStamped
+from geometry_msgs.msg import TransformStamped, PointStamped
 import tf2_ros
 from tf2_geometry_msgs import do_transform_point
+from scipy.spatial.transform import Rotation
 
+from kinova_action_interfaces.action import DetectObject
 
 METER_TO_MILLIMETER: float = 1000.0
 
@@ -169,55 +164,55 @@ class ObjectDetectionNode(Node):
         return result
 
     def _camera_to_base_link_transform(
-        self, X: float, Y: float, Z: float, target_view_point_distance: float
-    ) -> DetectObject.Result:
-        """This function converts an incoming 3D point with respect to camera_link to base_link
-
-        Args:
-            X (float): X coordinate
-            Y (float): Y coordinate
-            Z (float): Z coordinate
-            target_view_point_distance (float): how far the camera is desired from object
-
-        Returns:
-            DetectObject.Result: ROS2 message result type for DetectObject
-        """
+    self, X: float, Y: float, Z: float, target_view_point_distance: float
+) -> DetectObject.Result:
+        """Convert 3D point from camera_link to base_link and compute orientation."""
         result: DetectObject.Result = DetectObject.Result()
 
-        # Transform the object position from camera_link to base_link
-        object_in_camera_frame = PoseStamped()
-        object_in_camera_frame.pose.position.x = X
-        object_in_camera_frame.pose.position.y = Y
-        object_in_camera_frame.pose.position.z = Z
+        # Object position in camera frame
+        object_in_camera_frame = PointStamped()
+        object_in_camera_frame.point.x = X
+        object_in_camera_frame.point.y = Y
+        object_in_camera_frame.point.z = Z
 
-        object_view_point = PoseStamped()
-        object_view_point.pose.position.x = X
-        object_view_point.pose.position.y = Y
-        object_view_point.pose.position.z = Z - target_view_point_distance
+        # View point in camera frame (offset along Z-axis)
+        object_view_point = PointStamped()
+        object_view_point.point.x = X
+        object_view_point.point.y = Y
+        object_view_point.point.z = Z - target_view_point_distance
 
+        # Transform to base frame
         transform = self._tf_buffer.lookup_transform(
             "base_link", "camera_link", rclpy.time.Time()
         )
-        object_in_base_frame = do_transform_pose_stamped(
-            object_in_camera_frame, transform
-        )
+        object_in_base_frame = do_transform_point(object_in_camera_frame, transform)
+        object_view_point_in_base_frame = do_transform_point(object_view_point, transform)
 
-        result.object_position.x = object_in_base_frame.pose.position.x
-        result.object_position.y = object_in_base_frame.pose.position.y
-        result.object_position.z = object_in_base_frame.pose.position.z
+        # Set position results
+        result.object_position.x = object_in_base_frame.point.x
+        result.object_position.y = object_in_base_frame.point.y
+        result.object_position.z = object_in_base_frame.point.z
 
-        object_view_point_in_base_frame = do_transform_pose_stamped(
-            object_view_point, transform
-        )
+        result.view_position.position.x = object_view_point_in_base_frame.point.x
+        result.view_position.position.y = object_view_point_in_base_frame.point.y
+        result.view_position.position.z = object_view_point_in_base_frame.point.z
 
-        result.view_position = object_view_point_in_base_frame.pose
+        # Extract positions as NumPy arrays
+        object_pos = np.array([
+            object_in_base_frame.point.x,
+            object_in_base_frame.point.y,
+            object_in_base_frame.point.z
+        ])
+        view_pos = np.array([
+            object_view_point_in_base_frame.point.x,
+            object_view_point_in_base_frame.point.y,
+            object_view_point_in_base_frame.point.z
+        ])
 
-        transform_ee = self._tf_buffer.lookup_transform(
-            "base_link", "end_effector_link", rclpy.time.Time()
-        )
+        # Compute orientation
+        quaternion = self._compute_orientation(object_pos, view_pos)
 
-        quaternion: np.array = self._compute_orientation(transform_ee)
-
+        # Assign quaternion to result
         result.view_position.orientation.x = quaternion[0]
         result.view_position.orientation.y = quaternion[1]
         result.view_position.orientation.z = quaternion[2]
@@ -225,67 +220,52 @@ class ObjectDetectionNode(Node):
 
         return result
 
-    def _compute_orientation(
-        self,
-        base_to_ee_transform: TransformStamped,
-        object_in_base_frame: PoseStamped,
-        object_view_point: PoseStamped,
-    ) -> np.array:
-        # Extract rotation (quaternion)
-        end_effector_quat = [
-            base_to_ee_transform.transform.rotation.x,
-            base_to_ee_transform.transform.rotation.y,
-            base_to_ee_transform.transform.rotation.z,
-            base_to_ee_transform.transform.rotation.w,
-        ]
+    def _compute_orientation(self, object_position: np.array, view_position: np.array) -> np.array:
+        """
+        Compute the end effector orientation based on object and view positions in the base frame.
 
-        # print(f"end_effector_quat= x:{end_effector_quat[0]}, y:{end_effector_quat[1]}, z:{end_effector_quat[2]}, w:{end_effector_quat[3]} ")
+        Args:
+            object_position (np.array): 3D position of the object in the base frame [x, y, z].
+            view_position (np.array): 3D position of the view point in the base frame [x, y, z].
 
-        end_effector_rotation: Rotation = Rotation.from_quat(end_effector_quat)
+        Returns:
+            np.array: Quaternion [x, y, z, w] representing the orientation.
+        """
+        # Compute Z-axis: vector from view_position to object_position, normalized
+        Z = object_position - view_position
+        Z = Z / np.linalg.norm(Z)
 
-        # print(f"end_effector_rotation= {end_effector_rotation.as_matrix()}")
+        # Initial Y-axis: global Z-axis
+        Y = np.array([0.0, 0.0, 1.0])
 
-        # Calculate direction vector
-        direction = np.array(
-            [
-                object_in_base_frame.pose.position.x
-                - object_view_point.pose.position.x,
-                object_in_base_frame.pose.position.y
-                - object_view_point.pose.position.y,
-                object_in_base_frame.pose.position.z
-                - object_view_point.pose.position.z,
-            ]
-        )
+        # Orthogonalize Y with respect to Z using Gram-Schmidt
+        Y = Y - np.dot(Y, Z) * Z
+        Y_norm = np.linalg.norm(Y)
+        if Y_norm < 1e-6:
+            # Handle case where Z is nearly parallel to [0, 0, 1]
+            if np.abs(Z[2]) > 0.99:
+                Y = np.array([0.0, 1.0, 0.0])  # Use global Y-axis as fallback
+            else:
+                Y = np.array([1.0, 0.0, 0.0])  # Use global X-axis as fallback
+            Y = Y - np.dot(Y, Z) * Z  # Re-orthogonalize
+            Y = Y / np.linalg.norm(Y)
+        else:
+            Y = Y / Y_norm
 
-        z_axis_target = direction / np.linalg.norm(direction)
+        # Compute X-axis: Y cross Z
+        X = np.cross(Y, Z)
+        X = X / np.linalg.norm(X)  # Ensure unit length
 
-        z_axis_current = end_effector_rotation.as_matrix()[
-            :, 2
-        ]  # Third column is the current Z-axis
+        # Form rotation matrix with [X, Y, Z] as columns
+        rotation_matrix = np.column_stack((X, Y, Z))
 
-        # Compute the axis of rotation (cross product)
-        axis = np.cross(z_axis_current, z_axis_target)
-        axis = axis / np.linalg.norm(axis)  # Normalize the rotation axis
+        # Convert to quaternion
+        rotation = Rotation.from_matrix(rotation_matrix)
+        quaternion = rotation.as_quat()  # Returns [x, y, z, w]
 
-        # Compute the angle of rotation (dot product)
-        cos_theta = np.dot(z_axis_current, z_axis_target)
-        theta = np.arccos(cos_theta)
-
-        # Rodrigues' rotation formula
-        K = np.array(
-            [[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]]
-        )
-
-        I = np.eye(3)
-        R_align = I + np.sin(theta) * K + np.dot(K, K) * (1 - np.cos(theta))
-
-        rotation: Rotation = Rotation.from_matrix(R_align)
-        quaternion: np.array = rotation.as_quat()
-
-        self.get_logger().debug(f"quaternion of alligned end_effector = {quaternion}")
-
+        self.get_logger().debug(f"Computed quaternion: {quaternion}")
         return quaternion
-      
+
     def _yolo_object_detection(self, frames: dict, target_class: str) -> list[dict]:
         """Detect object using YOLOv11 from BGR image frame and compute depth
 
