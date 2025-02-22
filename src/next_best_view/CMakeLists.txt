@@ -36,6 +36,7 @@ find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_sensor_msgs REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(kinova_action_interfaces REQUIRED)
 find_package(moveit_ros_planning REQUIRED)
 find_package(control_msgs REQUIRED)
@@ -53,7 +54,8 @@ find_package(OpenCV REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(rcpputils REQUIRED)
-
+find_package(geometric_shapes REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 
 
@@ -65,7 +67,7 @@ add_executable(create_point_cloud2 src/create_point_cloud2.cpp)
 add_executable(merge_point_clouds src/merge_point_clouds.cpp)
 add_executable(canopy_volume src/canopy_volume.cpp)
 add_executable(point_cloud_publisher src/point_cloud_publisher.cpp)
-
+add_executable(object_detection src/object_detection.cpp)
 
 
 target_include_directories(hello_moveit PUBLIC
@@ -97,6 +99,10 @@ target_include_directories(canopy_volume PUBLIC
   $<INSTALL_INTERFACE:include>)
 
 target_include_directories(point_cloud_publisher PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+
+target_include_directories(object_detection PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
@@ -133,6 +139,7 @@ ament_target_dependencies(
   "moveit_visual_tools"
   "tf2"
   "rviz_visual_tools"
+  "geometric_shapes"
 
 )
 
@@ -230,6 +237,28 @@ ament_target_dependencies(
 
 )
 
+target_compile_features(object_detection PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+ament_target_dependencies(
+  object_detection
+  "rclcpp"
+  "rclcpp_action"
+  "message_filters"
+  "sensor_msgs"
+  "geometry_msgs"
+  "tf2"
+  "message_filters"
+  "cv_bridge"
+  "tf2"
+  "tf2_ros"
+  "tf2_ros"
+  "tf2_geometry_msgs"
+  "OpenCV"
+  "Eigen3"
+  "kinova_action_interfaces"
+
+)
+include_directories(${EIGEN3_INCLUDE_DIR})
+
 install(TARGETS hello_moveit
   DESTINATION lib/${PROJECT_NAME})
 
@@ -252,6 +281,9 @@ install(TARGETS canopy_volume
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS point_cloud_publisher
+  DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS object_detection
   DESTINATION lib/${PROJECT_NAME})
 
 # Install Python modules

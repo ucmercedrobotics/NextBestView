@@ -9,6 +9,9 @@ install/
 log/
 .ros/
 
+# Moveit IK files
+*.ikcache
+
 # C extensions
 *.so
 

@@ -164,57 +164,55 @@ class ObjectDetectionNode(Node):
         return result
 
     def _camera_to_base_link_transform(
-        self, X: float, Y: float, Z: float, target_view_point_distance: float
-    ) -> DetectObject.Result:
-        """This function converts an incoming 3D point with respect to camera_link to base_link
-
-        Args:
-            X (float): X coordinate
-            Y (float): Y coordinate
-            Z (float): Z coordinate
-            target_view_point_distance (float): how far the camera is desired from object
-
-        Returns:
-            DetectObject.Result: ROS2 message result type for DetectObject
-        """
+    self, X: float, Y: float, Z: float, target_view_point_distance: float
+) -> DetectObject.Result:
+        """Convert 3D point from camera_link to base_link and compute orientation."""
         result: DetectObject.Result = DetectObject.Result()
 
-        # Transform the object position from camera_link to base_link
+        # Object position in camera frame
         object_in_camera_frame = PointStamped()
         object_in_camera_frame.point.x = X
         object_in_camera_frame.point.y = Y
         object_in_camera_frame.point.z = Z
 
+        # View point in camera frame (offset along Z-axis)
         object_view_point = PointStamped()
         object_view_point.point.x = X
         object_view_point.point.y = Y
         object_view_point.point.z = Z - target_view_point_distance
 
+        # Transform to base frame
         transform = self._tf_buffer.lookup_transform(
             "base_link", "camera_link", rclpy.time.Time()
         )
         object_in_base_frame = do_transform_point(object_in_camera_frame, transform)
+        object_view_point_in_base_frame = do_transform_point(object_view_point, transform)
 
+        # Set position results
         result.object_position.x = object_in_base_frame.point.x
         result.object_position.y = object_in_base_frame.point.y
         result.object_position.z = object_in_base_frame.point.z
-
-        object_view_point_in_base_frame = do_transform_point(
-            object_view_point, transform
-        )
 
         result.view_position.position.x = object_view_point_in_base_frame.point.x
         result.view_position.position.y = object_view_point_in_base_frame.point.y
         result.view_position.position.z = object_view_point_in_base_frame.point.z
 
-        transform_ee = self._tf_buffer.lookup_transform(
-            "base_link", "end_effector_link", rclpy.time.Time()
-        )
+        # Extract positions as NumPy arrays
+        object_pos = np.array([
+            object_in_base_frame.point.x,
+            object_in_base_frame.point.y,
+            object_in_base_frame.point.z
+        ])
+        view_pos = np.array([
+            object_view_point_in_base_frame.point.x,
+            object_view_point_in_base_frame.point.y,
+            object_view_point_in_base_frame.point.z
+        ])
 
-        quaternion: np.array = self._compute_orientation(
-            transform_ee, object_in_base_frame, object_view_point
-        )
+        # Compute orientation
+        quaternion = self._compute_orientation(object_pos, view_pos)
 
+        # Assign quaternion to result
         result.view_position.orientation.x = quaternion[0]
         result.view_position.orientation.y = quaternion[1]
         result.view_position.orientation.z = quaternion[2]
@@ -222,85 +220,50 @@ class ObjectDetectionNode(Node):
 
         return result
 
-    def _compute_orientation(
-        self,
-        base_to_ee_transform: TransformStamped,
-        object_in_base_frame: PointStamped,
-        object_view_point: PointStamped,
-    ) -> np.array:
+    def _compute_orientation(self, object_position: np.array, view_position: np.array) -> np.array:
+        """
+        Compute the end effector orientation based on object and view positions in the base frame.
 
-        # Compute end effector orientation with following constraints:
-        # 1. Z-axis aligned with direction vector (camera looking at object)
-        # 2. X-axis parallel to x-y plane of the base
-        # 3. Y-axis pointing towards positive Z of base frame
+        Args:
+            object_position (np.array): 3D position of the object in the base frame [x, y, z].
+            view_position (np.array): 3D position of the view point in the base frame [x, y, z].
 
-        # Takes into account current end effector orientation relative to base frame.
+        Returns:
+            np.array: Quaternion [x, y, z, w] representing the orientation.
+        """
+        # Compute Z-axis: vector from view_position to object_position, normalized
+        Z = object_position - view_position
+        Z = Z / np.linalg.norm(Z)
 
-        # Get current end effector orientation
-        current_ee_quat = [
-            base_to_ee_transform.transform.rotation.x,
-            base_to_ee_transform.transform.rotation.y,
-            base_to_ee_transform.transform.rotation.z,
-            base_to_ee_transform.transform.rotation.w,
-        ]
-        current_ee_rotation = Rotation.from_quat(current_ee_quat)
-        current_ee_matrix = current_ee_rotation.as_matrix()
+        # Initial Y-axis: global Z-axis
+        Y = np.array([0.0, 0.0, 1.0])
 
-        # Calculate desired direction vector (this will be our new z-axis)
-        direction = np.array(
-            [
-                object_view_point.point.x - object_in_base_frame.point.x,
-                object_view_point.point.y - object_in_base_frame.point.y,
-                object_view_point.point.z - object_in_base_frame.point.z,
-            ]
-        )
+        # Orthogonalize Y with respect to Z using Gram-Schmidt
+        Y = Y - np.dot(Y, Z) * Z
+        Y_norm = np.linalg.norm(Y)
+        if Y_norm < 1e-6:
+            # Handle case where Z is nearly parallel to [0, 0, 1]
+            if np.abs(Z[2]) > 0.99:
+                Y = np.array([0.0, 1.0, 0.0])  # Use global Y-axis as fallback
+            else:
+                Y = np.array([1.0, 0.0, 0.0])  # Use global X-axis as fallback
+            Y = Y - np.dot(Y, Z) * Z  # Re-orthogonalize
+            Y = Y / np.linalg.norm(Y)
+        else:
+            Y = Y / Y_norm
 
-        # Normalize z-axis
-        z_axis = direction / np.linalg.norm(direction)
+        # Compute X-axis: Y cross Z
+        X = np.cross(Y, Z)
+        X = X / np.linalg.norm(X)  # Ensure unit length
 
-        # Define base frame's up vector (positive Z)
-        base_up = np.array([0, 0, 1])
-
-        # Compute y-axis using cross product of z-axis and base_up
-        # This ensures y-axis is perpendicular to both z-axis and base_up
-        y_axis = np.cross(z_axis, base_up)
-
-        # Handle the case where z_axis is parallel to base_up
-        if np.linalg.norm(y_axis) < 1e-6:
-            # Use current end effector x-axis projected onto xy-plane
-            y_axis = current_ee_matrix[:, 1]  # Use current y-axis as initial guess
-            y_axis[2] = 0  # Project onto xy-plane
-            if np.linalg.norm(y_axis) < 1e-6:
-                y_axis = np.array([1, 0, 0])  # Fallback if projection is too small
-
-        y_axis = y_axis / np.linalg.norm(y_axis)
-
-        # Compute x-axis to complete the right-handed coordinate system
-        x_axis = np.cross(y_axis, z_axis)
-        x_axis = x_axis / np.linalg.norm(x_axis)
-
-        # Project x-axis onto xy-plane and normalize
-        x_axis_proj = np.array([x_axis[0], x_axis[1], 0])
-        if np.linalg.norm(x_axis_proj) > 1e-6:  # Check if projection is not too small
-            x_axis = x_axis_proj / np.linalg.norm(x_axis_proj)
-            # Recompute y-axis to maintain orthogonality
-            y_axis = np.cross(z_axis, x_axis)
-            y_axis = y_axis / np.linalg.norm(y_axis)
-
-        # Construct desired rotation matrix from the three axes
-        desired_rotation_matrix = np.column_stack((x_axis, y_axis, z_axis))
-
-        # Compute the relative rotation from current to desired orientation
-        relative_rotation = desired_rotation_matrix @ current_ee_matrix.T
+        # Form rotation matrix with [X, Y, Z] as columns
+        rotation_matrix = np.column_stack((X, Y, Z))
 
         # Convert to quaternion
-        rotation = Rotation.from_matrix(relative_rotation)
-        quaternion = rotation.as_quat()
+        rotation = Rotation.from_matrix(rotation_matrix)
+        quaternion = rotation.as_quat()  # Returns [x, y, z, w]
 
-        self.get_logger().debug(
-            f"Final quaternion of aligned end_effector = {quaternion}"
-        )
-
+        self.get_logger().debug(f"Computed quaternion: {quaternion}")
         return quaternion
 
     def _yolo_object_detection(self, frames: dict, target_class: str) -> list[dict]:

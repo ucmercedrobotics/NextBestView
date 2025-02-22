@@ -22,7 +22,9 @@
   <depend>control_msgs</depend>
   <depend>moveit_msgs</depend>
   <depend>interactive_markers</depend>
-  <depend>geometric_shapes</depend>
+  <build_depend>geometric_shapes</build_depend>
+  <build_export_depend>geometric_shapes</build_export_depend>
+  <exec_depend>geometric_shapes</exec_depend>
   <exec_depend>kinova_gen3_6dof_robotiq_2f_85_moveit_config</exec_depend>
   <depend>moveit_visual_tools</depend>
   <depend>rviz_visual_tools</depend>
