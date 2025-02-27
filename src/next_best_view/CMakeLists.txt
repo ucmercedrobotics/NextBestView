@@ -61,7 +61,7 @@ find_package(Eigen3 REQUIRED)
 find_package(octomap REQUIRED)
 find_package(octomap_msgs REQUIRED)
 
-
+find_package(PCL REQUIRED COMPONENTS common io filters)
 
 add_executable(hello_moveit src/hello_moveit.cpp)
 add_executable(moveto src/moveto.cpp)
@@ -73,6 +73,8 @@ add_executable(canopy_volume src/canopy_volume.cpp)
 add_executable(point_cloud_publisher src/point_cloud_publisher.cpp)
 add_executable(object_detection src/object_detection.cpp)
 add_executable(octomap_generate src/octomap_generate.cpp)
+add_executable(point_cloud_filter src/point_cloud_filter.cpp)
+
 
 
 
@@ -113,6 +115,10 @@ target_include_directories(object_detection PUBLIC
   $<INSTALL_INTERFACE:include>)
   
 target_include_directories(octomap_generate PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+
+target_include_directories(point_cloud_filter PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
@@ -291,6 +297,18 @@ ament_target_dependencies(
   "octomap_msgs"
 )
 
+target_compile_features(point_cloud_filter PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+ament_target_dependencies(
+  point_cloud_filter
+  "rclcpp"
+  "std_msgs"
+  "sensor_msgs"
+  "pcl_conversions"
+  "pcl_ros"
+  "PCL"
+  "message_filters"
+  "kinova_action_interfaces"
+)
 
 install(TARGETS hello_moveit
   DESTINATION lib/${PROJECT_NAME})
@@ -320,6 +338,9 @@ install(TARGETS object_detection
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS octomap_generate
+  DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS point_cloud_filter
   DESTINATION lib/${PROJECT_NAME})
 
 # Install Python modules

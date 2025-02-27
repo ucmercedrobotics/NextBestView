@@ -42,6 +42,7 @@
   <depend>tf2_eigen</depend>
   <depend>moveit_ros_occupancy_map_monitor</depend>
   <depend>octomap_ros</depend>
+  <depend>libpcl-all-dev</depend>
 
 
   <test_depend>ament_lint_auto</test_depend>

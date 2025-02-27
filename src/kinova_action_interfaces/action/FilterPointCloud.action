@@ -1,0 +1,14 @@
+# Goal: Parameters to define the point cloud file and cylinder
+string pointcloud_file_path  # Path to the input point cloud file
+float32 center_x            # X-coordinate of the cylinder center
+float32 center_y            # Y-coordinate of the cylinder center
+float32 center_z            # Z-coordinate of the cylinder center
+float32 radius              # Radius of the cylinder
+float32 height              # Height of the cylinder
+---
+# Result: Outcome of the filtering operation
+bool success                # True if filtering succeeded, False otherwise
+string filtered_file_path   # Path to the saved filtered point cloud file
+---
+# Feedback: Optional progress updates (can be expanded if needed)
+string status_message       # Status updates during processing
