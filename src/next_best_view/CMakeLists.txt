@@ -173,9 +173,6 @@ ament_target_dependencies(
   "tf2"
   "tf2_ros"
   "rcpputils"
-
-
-
 )
 
 target_compile_features(create_point_cloud2 PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17

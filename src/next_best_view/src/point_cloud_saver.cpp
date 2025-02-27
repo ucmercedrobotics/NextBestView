@@ -2,141 +2,143 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>  // For transforming individual points
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
+#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
 
-#include <filesystem>  // C++17 filesystem library
-#include <fstream>
+#include <filesystem>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <chrono>  // For std::chrono literals
 
 namespace fs = std::filesystem;
 
 class PointCloudSaverNode : public rclcpp::Node {
  public:
-  PointCloudSaverNode() : Node("pointcloud_saver_node"), save_data_(false) {
-    // Define QoS settings to match the publisher (best-effort)
-    auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort();
+  PointCloudSaverNode() : Node("pointcloud_saver_node"), save_data_(false), file_counter_(0) {
+    // Declare parameters with default values
+    this->declare_parameter("save_interval", 1.0);  // Time in seconds between saves
+    this->declare_parameter("target_frame", "base_link");  // Target frame for transformation
+    this->declare_parameter("save_retries", 3);  // Number of retries for saving
 
-    // Subscribe to the PointCloud2 topic with the defined QoS
-    pointcloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-        "/camera/depth/color/points", qos,
-        std::bind(&PointCloudSaverNode::pointcloudCallback, this,
-                  std::placeholders::_1));
+    // Retrieve parameter values
+    save_interval_ = this->get_parameter("save_interval").as_double();
+    target_frame_ = this->get_parameter("target_frame").as_string();
+    save_retries_ = this->get_parameter("save_retries").as_int();
 
-    // Subscribe to the boolean trigger topic
-    trigger_sub_ = this->create_subscription<std_msgs::msg::Bool>(
-        "/save_trigger", 10,
-        std::bind(&PointCloudSaverNode::triggerCallback, this,
-                  std::placeholders::_1));
+    // Determine the save directory: one level above the source file's directory
+    fs::path source_file_path = fs::path(__FILE__);
+    fs::path parent_dir = source_file_path.parent_path().parent_path();  // One level up
+    fs::path save_dir = parent_dir / "point_clouds";
 
-    // Set the save directory to one level up in a folder named "point_clouds"
-    std::string relative_save_dir = "src/next_best_view/point_clouds";
-    if (!fs::exists(relative_save_dir)) {
-      // Create the directory if it does not exist
-      if (fs::create_directory(relative_save_dir)) {
-        RCLCPP_INFO(this->get_logger(), "Created directory: %s",
-                    relative_save_dir.c_str());
+    // Check if the directory exists, create it if it doesn't
+    if (!fs::exists(save_dir)) {
+      if (fs::create_directories(save_dir)) {
+        RCLCPP_INFO(this->get_logger(), "Created point_clouds directory: %s", save_dir.c_str());
       } else {
-        RCLCPP_ERROR(this->get_logger(), "Failed to create directory: %s",
-                     relative_save_dir.c_str());
+        RCLCPP_ERROR(this->get_logger(), "Failed to create point_clouds directory: %s", save_dir.c_str());
       }
     } else {
-      RCLCPP_INFO(this->get_logger(), "Directory already exists: %s",
-                  relative_save_dir.c_str());
+      RCLCPP_INFO(this->get_logger(), "Using existing point_clouds directory: %s", save_dir.c_str());
     }
-    // Append a trailing slash (if desired)
-    save_directory_ = relative_save_dir + "/";
+    save_directory_ = save_dir.string() + "/";
 
     // Initialize TF2 buffer and listener
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
+    // Define QoS profile: Best Effort, Keep Last with depth 5
+    auto qos = rclcpp::QoS(rclcpp::KeepLast(5)).best_effort();
+
+    // Subscriptions
+    pointcloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+        "/camera/depth/color/points", qos, std::bind(&PointCloudSaverNode::pointcloudCallback, this, std::placeholders::_1));
+    trigger_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+        "/save_trigger", 10, std::bind(&PointCloudSaverNode::triggerCallback, this, std::placeholders::_1));
+
+    // Initialize last_save_time_ with the node's clock time
+    last_save_time_ = this->now();
+
+    RCLCPP_INFO(this->get_logger(), "PointCloudSaverNode initialized.");
   }
 
  private:
   void pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
-    if (save_data_) {
-      // Convert ROS PointCloud2 to PCL PointCloud (with color)
-      pcl::PointCloud<pcl::PointXYZRGB> cloud;
-      pcl::fromROSMsg(*msg, cloud);
+    RCLCPP_INFO(this->get_logger(), "Received point cloud message");
+    if (!save_data_) {
+      return; // Skip if not triggered to save
+    }
 
-      // Transform each point to the base frame
-      pcl::PointCloud<pcl::PointXYZRGB> transformed_cloud;
-      try {
-        geometry_msgs::msg::TransformStamped transform =
-            tf_buffer_->lookupTransform(
-                "base_link",           // Target frame (base frame)
-                msg->header.frame_id,  // Source frame (camera frame)
-                msg->header.stamp);
+    // Check if enough time has passed since the last save
+    rclcpp::Time current_time = this->now();
+    if ((current_time - last_save_time_).seconds() < save_interval_) {
+      return; // Skip if interval hasn't elapsed
+    }
 
-        for (const auto& point : cloud.points) {
-          geometry_msgs::msg::PointStamped point_in, point_out;
-          point_in.point.x = point.x;
-          point_in.point.y = point.y;
-          point_in.point.z = point.z;
-          point_in.header = msg->header;
+    // Convert ROS PointCloud2 to PCL PointCloud with RGB
+    pcl::PointCloud<pcl::PointXYZRGB> cloud;
+    pcl::fromROSMsg(*msg, cloud);
 
-          // Transform the point
-          tf2::doTransform(point_in, point_out, transform);
+    // Transform the point cloud to the target frame
+    sensor_msgs::msg::PointCloud2 transformed_msg;
+    try {
+      tf_buffer_->transform(*msg, transformed_msg, target_frame_, tf2::Duration(std::chrono::seconds(1)));
+    } catch (const tf2::TransformException &ex) {
+      RCLCPP_WARN(this->get_logger(), "Transform failed: %s", ex.what());
+      return;
+    }
 
-          // Add the transformed point to the new cloud (with color)
-          pcl::PointXYZRGB transformed_point;
-          transformed_point.x = point_out.point.x;
-          transformed_point.y = point_out.point.y;
-          transformed_point.z = point_out.point.z;
-          transformed_point.r = point.r;  // Copy the color
-          transformed_point.g = point.g;
-          transformed_point.b = point.b;
-          transformed_cloud.push_back(transformed_point);
-        }
-      } catch (tf2::TransformException& ex) {
-        RCLCPP_ERROR(this->get_logger(), "TF2 transform error: %s", ex.what());
-        return;
+    // Convert transformed message back to PCL format with RGB
+    pcl::PointCloud<pcl::PointXYZRGB> transformed_cloud;
+    pcl::fromROSMsg(transformed_msg, transformed_cloud);
+
+    // Generate filename
+    std::string filename = save_directory_ + "pointcloud_" + std::to_string(file_counter_++) + ".pcd";
+
+    // Save with retries
+    for (int i = 0; i <= save_retries_; ++i) {
+      if (pcl::io::savePCDFileBinary(filename, transformed_cloud) == 0) {
+        RCLCPP_INFO(this->get_logger(), "Saved point cloud to %s", filename.c_str());
+        last_save_time_ = this->now(); // Update with node's clock time
+        break;
+      } else if (i == save_retries_) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to save point cloud to %s after %d retries", filename.c_str(), save_retries_);
+      } else {
+        RCLCPP_WARN(this->get_logger(), "Retry %d/%d: Failed to save point cloud to %s", i + 1, save_retries_, filename.c_str());
+        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Brief delay before retry
       }
-
-      // Filter points that are more than 1 meter away from the camera
-      pcl::PointCloud<pcl::PointXYZRGB> filtered_cloud;
-      for (const auto& point : transformed_cloud.points) {
-        if (std::sqrt(point.x * point.x + point.y * point.y +
-                      point.z * point.z) <= 1.0) {
-          filtered_cloud.push_back(point);
-        }
-      }
-
-      // Save the filtered point cloud to a file in the specified directory
-      std::string filename = save_directory_ + "pointcloud_" +
-                             std::to_string(file_counter_++) + ".pcd";
-      pcl::io::savePCDFileASCII(filename, filtered_cloud);
-      RCLCPP_INFO(this->get_logger(), "Saved filtered point cloud to %s",
-                  filename.c_str());
     }
   }
 
   void triggerCallback(const std_msgs::msg::Bool::SharedPtr msg) {
     save_data_ = msg->data;
-    if (!save_data_) {
-      RCLCPP_INFO(this->get_logger(), "Stopped saving point clouds.");
-    } else {
-      RCLCPP_INFO(this->get_logger(), "Started saving point clouds.");
-    }
+    RCLCPP_INFO(this->get_logger(), "Save trigger set to %s", save_data_ ? "true" : "false");
   }
 
-  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr
-      pointcloud_sub_;
+  // Parameters
+  double save_interval_;            // Minimum time between saves (seconds)
+  std::string target_frame_;        // Frame to transform point cloud to
+  int save_retries_;                // Number of retries for saving
+  std::string save_directory_;      // Fixed directory to save point cloud files
+
+  // State variables
+  bool save_data_;                  // Whether to save point clouds
+  rclcpp::Time last_save_time_;     // Timestamp of the last save
+  int file_counter_;                // Counter for unique filenames
+
+  // ROS and TF2 components
+  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr trigger_sub_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
-  bool save_data_;
-  int file_counter_ = 0;
-  std::string save_directory_;  // Directory to save the point cloud files
 };
 
-int main(int argc, char* argv[]) {
+int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<PointCloudSaverNode>());
+  auto node = std::make_shared<PointCloudSaverNode>();
+  rclcpp::spin(node);
   rclcpp::shutdown();
   return 0;
 }
