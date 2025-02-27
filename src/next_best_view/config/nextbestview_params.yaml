@@ -1,0 +1,7 @@
+nextbestview:
+  ros__parameters:
+    height: 2.0              # Height of the collision cylinder and cylindrical poses (meters)
+    total_poses: 360         # Total number of poses for cylindrical poses
+    sleep_time: 5            # Sleep time between point cloud saves (seconds)
+    z_increments: 10         # Total number of Z increments for cylindrical poses
+    cylinder_diameter: 0.5   # Diameter of the cylindrical collision box (meters)

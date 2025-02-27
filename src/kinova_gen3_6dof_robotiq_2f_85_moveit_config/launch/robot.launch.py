@@ -26,6 +26,7 @@ from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
+import yaml
 
 
 def launch_setup(context, *args, **kwargs):
@@ -37,6 +38,7 @@ def launch_setup(context, *args, **kwargs):
     launch_rviz = LaunchConfiguration("launch_rviz")
     use_sim_time = LaunchConfiguration("use_sim_time")
     use_internal_bus_gripper_comm = LaunchConfiguration("use_internal_bus_gripper_comm")
+    
 
     launch_arguments = {
         "robot_ip": robot_ip,
@@ -47,25 +49,32 @@ def launch_setup(context, *args, **kwargs):
         "gripper_max_velocity": gripper_max_velocity,
         "gripper_max_force": gripper_max_force,
         "use_internal_bus_gripper_comm": use_internal_bus_gripper_comm,
-        "vision": "true",
+        "vision": "true"
     }
 
     moveit_config = (
-        MoveItConfigsBuilder(
-            "gen3", package_name="kinova_gen3_6dof_robotiq_2f_85_moveit_config"
-        )
+        MoveItConfigsBuilder("gen3", package_name="kinova_gen3_6dof_robotiq_2f_85_moveit_config")
         .robot_description(mappings=launch_arguments)
         .trajectory_execution(file_path="config/moveit_controllers.yaml")
         .planning_scene_monitor(
             publish_robot_description=True, publish_robot_description_semantic=True
         )
         .planning_pipelines(pipelines=["ompl", "pilz_industrial_motion_planner"])
+        .sensors_3d(  # Add this back to properly configure sensors
+            os.path.join(
+                get_package_share_directory("kinova_gen3_6dof_robotiq_2f_85_moveit_config"),
+                "config/sensors_3d.yaml",
+        )
+    )
         .to_moveit_configs()
     )
 
-    moveit_config.moveit_cpp.update(
-        {"use_sim_time": use_sim_time.perform(context) == "true"}
-    )
+    moveit_config.moveit_cpp.update({"use_sim_time": use_sim_time.perform(context) == "true"})
+
+    octomap_config = {'octomap_frame': 'base_link', 
+                      'octomap_resolution': 0.05,
+                      'max_range': 5.0}
+    
 
     move_group_node = Node(
         package="moveit_ros_move_group",
@@ -73,9 +82,11 @@ def launch_setup(context, *args, **kwargs):
         output="screen",
         parameters=[
             moveit_config.to_dict(),
+            octomap_config,  # Should be merged with moveit_config
+            
         ],
     )
-
+    
     # Static TF
     static_tf = Node(
         package="tf2_ros",
@@ -184,6 +195,7 @@ def launch_setup(context, *args, **kwargs):
         fault_controller_spawner,
         move_group_node,
         static_tf,
+
     ]
 
     return nodes_to_start
@@ -236,11 +248,7 @@ def generate_launch_description():
     )
 
     declared_arguments.append(
-        DeclareLaunchArgument(
-            "launch_rviz", default_value="true", description="Launch RViz?"
-        )
+        DeclareLaunchArgument("launch_rviz", default_value="true", description="Launch RViz?")
     )
 
-    return LaunchDescription(
-        declared_arguments + [OpaqueFunction(function=launch_setup)]
-    )
+    return LaunchDescription(declared_arguments + [OpaqueFunction(function=launch_setup)])

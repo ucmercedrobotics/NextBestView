@@ -35,6 +35,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_eigen REQUIRED)
 find_package(tf2_sensor_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(kinova_action_interfaces REQUIRED)
@@ -56,6 +57,9 @@ find_package(message_filters REQUIRED)
 find_package(rcpputils REQUIRED)
 find_package(geometric_shapes REQUIRED)
 find_package(Eigen3 REQUIRED)
+# Octomap
+find_package(octomap REQUIRED)
+find_package(octomap_msgs REQUIRED)
 
 
 
@@ -68,6 +72,8 @@ add_executable(merge_point_clouds src/merge_point_clouds.cpp)
 add_executable(canopy_volume src/canopy_volume.cpp)
 add_executable(point_cloud_publisher src/point_cloud_publisher.cpp)
 add_executable(object_detection src/object_detection.cpp)
+add_executable(octomap_generate src/octomap_generate.cpp)
+
 
 
 target_include_directories(hello_moveit PUBLIC
@@ -105,6 +111,10 @@ target_include_directories(point_cloud_publisher PUBLIC
 target_include_directories(object_detection PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
+  
+target_include_directories(octomap_generate PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
 
 target_compile_features(hello_moveit PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
@@ -140,6 +150,13 @@ ament_target_dependencies(
   "tf2"
   "rviz_visual_tools"
   "geometric_shapes"
+  "octomap"
+  "octomap_msgs"
+  "pcl_conversions"
+  "pcl_ros"
+  "PCL"
+  "sensor_msgs"
+
 
 )
 
@@ -255,9 +272,28 @@ ament_target_dependencies(
   "OpenCV"
   "Eigen3"
   "kinova_action_interfaces"
-
 )
 include_directories(${EIGEN3_INCLUDE_DIR})
+
+target_compile_features(octomap_generate PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+ament_target_dependencies(
+  octomap_generate
+  "rclcpp"
+  "std_msgs"
+  "sensor_msgs"
+  "pcl_conversions"
+  "pcl_ros"
+  "PCL"
+  "message_filters"
+  "tf2"
+  "tf2_ros"
+  "tf2_eigen"
+  "geometry_msgs"
+  "tf2_sensor_msgs"
+  "octomap"
+  "octomap_msgs"
+)
+
 
 install(TARGETS hello_moveit
   DESTINATION lib/${PROJECT_NAME})
@@ -286,6 +322,9 @@ install(TARGETS point_cloud_publisher
 install(TARGETS object_detection
   DESTINATION lib/${PROJECT_NAME})
 
+install(TARGETS octomap_generate
+  DESTINATION lib/${PROJECT_NAME})
+
 # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
@@ -298,6 +337,7 @@ DESTINATION lib/${PROJECT_NAME}
 # Install launch files.
 install(DIRECTORY
   launch
+  config
   DESTINATION share/${PROJECT_NAME}/
 )
 

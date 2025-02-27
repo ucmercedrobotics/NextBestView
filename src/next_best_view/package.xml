@@ -38,6 +38,11 @@
   <depend>tf2_sensor_msgs</depend>
   <depend>PCL</depend>
   <depend>rcpputils</depend>
+  <depend>octomat_msgs</depend>
+  <depend>tf2_eigen</depend>
+  <depend>moveit_ros_occupancy_map_monitor</depend>
+  <depend>octomap_ros</depend>
+
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
