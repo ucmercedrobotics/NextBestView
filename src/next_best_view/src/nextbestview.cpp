@@ -16,14 +16,14 @@
 #include <moveit_msgs/msg/display_robot_state.hpp>
 #include <moveit_msgs/msg/display_trajectory.hpp>
 #include <rviz_visual_tools/rviz_visual_tools.hpp>
-#include <std_msgs/msg/bool.hpp>
 #include <string>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <thread>
 #include <random>
-#include <limits>  // Added for std::numeric_limits
+#include <limits>
 
 #include "kinova_action_interfaces/action/next_best_view.hpp"
+#include "kinova_action_interfaces/action/save_point_cloud.hpp"  // Added for save point cloud action
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 
@@ -35,9 +35,6 @@ class NextBestViewServer : public rclcpp::Node {
   /** Constructor: Declare parameters only */
   explicit NextBestViewServer(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
       : Node("nbv_server", options) {
-    // Declare common parameters
-    this->declare_parameter("sleep_time", 5);
-
     // Declare shape-specific parameters
     this->declare_parameter("cylinder_height", 2.0);
     this->declare_parameter("cylinder_total_poses", 180);
@@ -59,9 +56,6 @@ class NextBestViewServer : public rclcpp::Node {
     this->declare_parameter("plane_width", 1.0);
     this->declare_parameter("plane_height", 1.0);
     this->declare_parameter("plane_total_poses", 100);
-
-    // Load common parameter
-    sleep_time_ = this->get_parameter("sleep_time").as_int();
   }
 
   /** Initialize MoveIt and ROS components after construction */
@@ -82,18 +76,17 @@ class NextBestViewServer : public rclcpp::Node {
         std::bind(&NextBestViewServer::handle_cancel, this, std::placeholders::_1),
         std::bind(&NextBestViewServer::handle_accepted, this, std::placeholders::_1));
 
-    save_trigger_pub_ = this->create_publisher<std_msgs::msg::Bool>("/save_trigger", 10);
+    // Initialize the save point cloud action client
+    save_point_cloud_client_ = rclcpp_action::create_client<kinova_action_interfaces::action::SavePointCloud>(
+        this, "save_point_cloud");
   }
 
  private:
   // Member variables
   rclcpp_action::Server<Nbv>::SharedPtr action_server_;
-  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr save_trigger_pub_;
+  rclcpp_action::Client<kinova_action_interfaces::action::SavePointCloud>::SharedPtr save_point_cloud_client_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_interface_;
   std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools_;
-
-  // Common parameter
-  int sleep_time_;
 
   // Shape-specific parameters
   double cylinder_height_;
@@ -114,7 +107,6 @@ class NextBestViewServer : public rclcpp::Node {
   double rectangle_height_;
   int rectangle_total_poses_;
 
-  // Plane-specific parameters
   double plane_width_;
   double plane_height_;
   int plane_total_poses_;
@@ -151,7 +143,7 @@ class NextBestViewServer : public rclcpp::Node {
         tour.push_back(current);
         visited[next_index] = true;
       } else {
-        break;  // All poses visited
+        break;
       }
     }
     return tour;
@@ -211,8 +203,8 @@ class NextBestViewServer : public rclcpp::Node {
                                                                float radius) {
     std::vector<geometry_msgs::msg::Pose> nbv_poses;
     for (int k = 0; k < cylinder_total_poses_; ++k) {
-      int j = k % cylinder_n_theta_;  // Angle index
-      int i = k / cylinder_n_theta_;  // Height index
+      int j = k % cylinder_n_theta_;
+      int i = k / cylinder_n_theta_;
       double theta = 2.0 * M_PI * j / cylinder_n_theta_;
       double z_offset = -cylinder_height_ / 2.0 + cylinder_height_ * i / (cylinder_z_increments_ - 1.0);
 
@@ -232,11 +224,11 @@ class NextBestViewServer : public rclcpp::Node {
   std::vector<geometry_msgs::msg::Pose> generateHemispherePoints(const geometry_msgs::msg::Point& object_position,
                                                                  float radius) {
     std::vector<geometry_msgs::msg::Pose> nbv_poses;
-    int n_phi = sqrt(hemisphere_total_poses_ / 2);  // Approximate divisions
+    int n_phi = static_cast<int>(sqrt(hemisphere_total_poses_ / 2));
     int n_theta = 2 * n_phi;
 
     for (int i = 0; i < n_phi; ++i) {
-      double phi = M_PI / 2.0 * i / (n_phi - 1.0);  // 0 to pi/2 (top hemisphere)
+      double phi = M_PI / 2.0 * i / (n_phi - 1.0);
       for (int j = 0; j < n_theta; ++j) {
         double theta = 2.0 * M_PI * j / n_theta;
         geometry_msgs::msg::Pose pose;
@@ -256,11 +248,11 @@ class NextBestViewServer : public rclcpp::Node {
   std::vector<geometry_msgs::msg::Pose> generateSpherePoints(const geometry_msgs::msg::Point& object_position,
                                                              float radius) {
     std::vector<geometry_msgs::msg::Pose> nbv_poses;
-    int n_phi = sqrt(sphere_total_poses_ / 2);  // Approximate divisions
+    int n_phi = static_cast<int>(sqrt(sphere_total_poses_ / 2));
     int n_theta = 2 * n_phi;
 
     for (int i = 0; i < n_phi; ++i) {
-      double phi = M_PI * i / (n_phi - 1.0);  // 0 to pi (full sphere)
+      double phi = M_PI * i / (n_phi - 1.0);
       for (int j = 0; j < n_theta; ++j) {
         double theta = 2.0 * M_PI * j / n_theta;
         geometry_msgs::msg::Pose pose;
@@ -280,7 +272,7 @@ class NextBestViewServer : public rclcpp::Node {
   std::vector<geometry_msgs::msg::Pose> generateRectanglePoints(const geometry_msgs::msg::Point& object_position,
                                                                 float distance) {
     std::vector<geometry_msgs::msg::Pose> nbv_poses;
-    int n_x = cbrt(rectangle_total_poses_);  // Cube root for approximate 3D distribution
+    int n_x = static_cast<int>(cbrt(rectangle_total_poses_));
     int n_y = n_x;
     int n_z = rectangle_total_poses_ / (n_x * n_y);
 
@@ -308,10 +300,9 @@ class NextBestViewServer : public rclcpp::Node {
   std::vector<geometry_msgs::msg::Pose> generatePlanePoints(const geometry_msgs::msg::Point& object_position,
                                                             float distance) {
     std::vector<geometry_msgs::msg::Pose> nbv_poses;
-    int n_width = std::sqrt(plane_total_poses_);  // Number of poses along width
-    int n_height = plane_total_poses_ / n_width;  // Number of poses along height
+    int n_width = static_cast<int>(std::sqrt(plane_total_poses_));
+    int n_height = plane_total_poses_ / n_width;
 
-    // Check if object is too close to base link
     double norm = std::sqrt(object_position.x * object_position.x +
                             object_position.y * object_position.y +
                             object_position.z * object_position.z);
@@ -320,28 +311,24 @@ class NextBestViewServer : public rclcpp::Node {
       return {};
     }
 
-    // Compute plane center: distance from object towards base link
     Eigen::Vector3d unit_vec = Eigen::Vector3d(object_position.x / norm,
                                                object_position.y / norm,
                                                object_position.z / norm);
     Eigen::Vector3d plane_center = Eigen::Vector3d(object_position.x, object_position.y, object_position.z) -
                                    distance * unit_vec;
 
-    // Compute normal vector (in XY plane, towards object)
     double xy_norm = std::sqrt(object_position.x * object_position.x +
                                object_position.y * object_position.y);
     Eigen::Vector3d normal_vector;
     if (xy_norm < 1e-6) {
-      normal_vector = Eigen::Vector3d(1.0, 0.0, 0.0);  // Default if object on Z-axis
+      normal_vector = Eigen::Vector3d(1.0, 0.0, 0.0);
     } else {
       normal_vector = Eigen::Vector3d(object_position.x / xy_norm, object_position.y / xy_norm, 0.0);
     }
 
-    // Define plane axes
-    Eigen::Vector3d height_axis(0.0, 0.0, 1.0);  // Z-axis
-    Eigen::Vector3d width_axis = height_axis.cross(normal_vector).normalized();  // Perpendicular in XY
+    Eigen::Vector3d height_axis(0.0, 0.0, 1.0);
+    Eigen::Vector3d width_axis = height_axis.cross(normal_vector).normalized();
 
-    // Generate poses
     for (int i = 0; i < n_width; ++i) {
       double w_offset = -plane_width_ / 2.0 + plane_width_ * i / (n_width - 1);
       for (int j = 0; j < n_height; ++j) {
@@ -407,7 +394,6 @@ class NextBestViewServer : public rclcpp::Node {
     visual_tools_->deleteAllMarkers();
     visual_tools_->loadRemoteControl();
 
-    // Simplified collision object
     moveit_msgs::msg::CollisionObject collision_object;
     collision_object.header.frame_id = move_group_interface_->getPlanningFrame();
     collision_object.id = "object";
@@ -424,7 +410,7 @@ class NextBestViewServer : public rclcpp::Node {
     } else {
       primitive.type = primitive.BOX;
       primitive.dimensions.resize(3);
-      primitive.dimensions[0] = 0.1;  // Placeholder dimensions
+      primitive.dimensions[0] = 0.1;
       primitive.dimensions[1] = 0.1;
       primitive.dimensions[2] = 0.1;
     }
@@ -509,14 +495,11 @@ class NextBestViewServer : public rclcpp::Node {
       return;
     }
 
-    // Select poses based on visit_all
     std::vector<geometry_msgs::msg::Pose> selected_poses;
     if (goal->visit_all) {
-      // Visit all reachable poses with TSP
       geometry_msgs::msg::Pose current_pose = move_group_interface_->getCurrentPose().pose;
       selected_poses = solveTSP(reachable_poses, current_pose);
     } else {
-      // Visit a random subset of reachable poses
       int target_locations = std::min(goal->location_number, static_cast<int>(reachable_poses.size()));
       selected_poses = selectRandomPoses(reachable_poses, target_locations);
     }
@@ -530,14 +513,18 @@ class NextBestViewServer : public rclcpp::Node {
         RCLCPP_INFO(this->get_logger(), "Goal canceled during execution");
         return;
       }
-      if (!moveToPose(pose)) continue;
+      if (!moveToPose(pose)) {
+        RCLCPP_WARN(this->get_logger(), "Failed to move to pose (%.2f, %.2f, %.2f), skipping",
+                    pose.position.x, pose.position.y, pose.position.z);
+        continue;
+      }
 
-      std_msgs::msg::Bool save_msg;
-      save_msg.data = true;
-      save_trigger_pub_->publish(save_msg);
-      std::this_thread::sleep_for(std::chrono::seconds(sleep_time_));
-      save_msg.data = false;
-      save_trigger_pub_->publish(save_msg);
+      // Save point cloud using action client
+      if (!savePointCloud()) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to save point cloud at pose (%.2f, %.2f, %.2f), continuing to next pose",
+                     pose.position.x, pose.position.y, pose.position.z);
+        continue;
+      }
     }
 
     result->success = true;
@@ -600,6 +587,53 @@ class NextBestViewServer : public rclcpp::Node {
     return true;
   }
 
+  /** Save the point cloud at the current pose using the save_point_cloud action */
+  bool savePointCloud() {
+    if (!save_point_cloud_client_->wait_for_action_server(std::chrono::seconds(10))) {
+      RCLCPP_ERROR(this->get_logger(), "Save point cloud action server not available");
+      return false;
+    }
+
+    auto goal = kinova_action_interfaces::action::SavePointCloud::Goal();
+    goal.start_saving = true;
+
+    auto send_goal_options = rclcpp_action::Client<kinova_action_interfaces::action::SavePointCloud>::SendGoalOptions();
+
+    auto goal_handle_future = save_point_cloud_client_->async_send_goal(goal, send_goal_options);
+
+    if (goal_handle_future.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
+      RCLCPP_ERROR(this->get_logger(), "Save point cloud action did not accept the goal within timeout");
+      return false;
+    }
+
+    auto goal_handle = goal_handle_future.get();
+    if (!goal_handle) {
+      RCLCPP_ERROR(this->get_logger(), "Save point cloud goal was rejected");
+      return false;
+    }
+
+    auto result_future = save_point_cloud_client_->async_get_result(goal_handle);
+    if (result_future.wait_for(std::chrono::seconds(30)) != std::future_status::ready) {
+      RCLCPP_ERROR(this->get_logger(), "Save point cloud action did not complete within timeout");
+      return false;
+    }
+
+    auto wrapped_result = result_future.get();
+    if (wrapped_result.code == rclcpp_action::ResultCode::SUCCEEDED) {
+      if (wrapped_result.result->success) {
+        RCLCPP_INFO(this->get_logger(), "Point cloud saved successfully");
+        return true;
+      } else {
+        RCLCPP_ERROR(this->get_logger(), "Failed to save point cloud (action succeeded but result indicates failure)");
+        return false;
+      }
+    } else {
+      RCLCPP_ERROR(this->get_logger(), "Save point cloud action failed with code: %d",
+                   static_cast<int>(wrapped_result.code));
+      return false;
+    }
+  }
+
   /** Handle goal cancellation */
   rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandleNbv> goal_handle) {
     RCLCPP_INFO(this->get_logger(), "Received request to cancel goal");
@@ -637,7 +671,7 @@ class NextBestViewServer : public rclcpp::Node {
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   auto action_server = std::make_shared<NextBestViewServer>();
-  action_server->initialize();  // Initialize after shared_ptr creation
+  action_server->initialize();
   rclcpp::executors::MultiThreadedExecutor executor;
   executor.add_node(action_server);
   executor.spin();
