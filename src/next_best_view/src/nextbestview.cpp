@@ -75,7 +75,7 @@ class NextBestViewServer : public rclcpp::Node {
         std::bind(&NextBestViewServer::handle_accepted, this, std::placeholders::_1));
 
     save_point_cloud_client_ = rclcpp_action::create_client<kinova_action_interfaces::action::SavePointCloud>(
-        this, "save_point_cloud");
+        this, "save_pointcloud");
   }
 
  private:
@@ -391,32 +391,80 @@ class NextBestViewServer : public rclcpp::Node {
     visual_tools_->deleteAllMarkers();
     visual_tools_->loadRemoteControl();
 
+    // First collision object (existing)
     moveit_msgs::msg::CollisionObject collision_object;
     collision_object.header.frame_id = move_group_interface_->getPlanningFrame();
     collision_object.id = "object";
     shape_msgs::msg::SolidPrimitive primitive;
     geometry_msgs::msg::Pose object_pose;
-    object_pose.orientation.w = 1.0;
+    object_pose.orientation.w = 1.0;  // Identity orientation (no rotation)
     object_pose.position = goal->object_position;
 
     if (goal->shape_type == "cylinder") {
-      primitive.type = primitive.CYLINDER;
-      primitive.dimensions.resize(2);
-      primitive.dimensions[0] = cylinder_height_;
-      primitive.dimensions[1] = cylinder_radius_;
+        primitive.type = primitive.CYLINDER;
+        primitive.dimensions.resize(2);
+        primitive.dimensions[0] = cylinder_height_;  // Height
+        primitive.dimensions[1] = cylinder_radius_;  // Radius
     } else {
-      primitive.type = primitive.BOX;
-      primitive.dimensions.resize(3);
-      primitive.dimensions[0] = 0.1;
-      primitive.dimensions[1] = 0.1;
-      primitive.dimensions[2] = 0.1;
+        primitive.type = primitive.BOX;
+        primitive.dimensions.resize(3);
+        primitive.dimensions[0] = 0.1;  // Length
+        primitive.dimensions[1] = 0.1;  // Width
+        primitive.dimensions[2] = 0.1;  // Height
     }
 
     collision_object.primitives.push_back(primitive);
     collision_object.primitive_poses.push_back(object_pose);
     collision_object.operation = collision_object.ADD;
 
-    std::vector<moveit_msgs::msg::CollisionObject> collision_objects = {collision_object};
+    // Second collision object: rectangle
+    moveit_msgs::msg::CollisionObject rectangle_collision_object;
+    rectangle_collision_object.header.frame_id = move_group_interface_->getPlanningFrame();
+    rectangle_collision_object.id = "rectangle_object";
+
+    shape_msgs::msg::SolidPrimitive rectangle_primitive;
+    rectangle_primitive.type = rectangle_primitive.BOX;
+    rectangle_primitive.dimensions.resize(3);
+    rectangle_primitive.dimensions[0] = 1.2;  // Length (x)
+    rectangle_primitive.dimensions[1] = 1.2;  // Width (y)
+    rectangle_primitive.dimensions[2] = 0.2;  // Height (z)
+
+    geometry_msgs::msg::Pose rectangle_pose;
+    rectangle_pose.orientation.w = 1.0;  // Identity orientation (no rotation)
+    rectangle_pose.position.x = -0.4;
+    rectangle_pose.position.y = 0.4;
+    rectangle_pose.position.z = -0.1;
+
+    rectangle_collision_object.primitives.push_back(rectangle_primitive);
+    rectangle_collision_object.primitive_poses.push_back(rectangle_pose);
+    rectangle_collision_object.operation = rectangle_collision_object.ADD;
+
+    // Second collision object: rectangle
+    moveit_msgs::msg::CollisionObject control_panel_object;
+    control_panel_object.header.frame_id = move_group_interface_->getPlanningFrame();
+    control_panel_object.id = "control_panel_object";
+
+    shape_msgs::msg::SolidPrimitive control_panel_primitive;
+    control_panel_primitive.type = control_panel_primitive.BOX;
+    control_panel_primitive.dimensions.resize(3);
+    control_panel_primitive.dimensions[0] = 0.3;  // Length (x)
+    control_panel_primitive.dimensions[1] = 1.2;  // Width (y)
+    control_panel_primitive.dimensions[2] = 1.0;  // Height (z)
+
+    geometry_msgs::msg::Pose control_panel_pose;
+    control_panel_pose.orientation.w = 1.0;  // Identity orientation (no rotation)
+    control_panel_pose.position.x = -0.8;
+    control_panel_pose.position.y = 0.4;
+    control_panel_pose.position.z = 0.3;
+
+    control_panel_object.primitives.push_back(control_panel_primitive);
+    control_panel_object.primitive_poses.push_back(control_panel_pose);
+    control_panel_object.operation = control_panel_object.ADD;
+
+    // Combine both collision objects into the vector
+    std::vector<moveit_msgs::msg::CollisionObject> collision_objects = {collision_object, rectangle_collision_object, control_panel_object};
+
+    // Apply to the planning scene
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
     planning_scene_interface.applyCollisionObjects(collision_objects);
 
