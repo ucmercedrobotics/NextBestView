@@ -23,7 +23,7 @@
 #include <limits>
 
 #include "kinova_action_interfaces/action/next_best_view.hpp"
-#include "kinova_action_interfaces/action/save_point_cloud.hpp"  // Added for save point cloud action
+#include "kinova_action_interfaces/action/save_point_cloud.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 
@@ -35,7 +35,6 @@ class NextBestViewServer : public rclcpp::Node {
   /** Constructor: Declare parameters only */
   explicit NextBestViewServer(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
       : Node("nbv_server", options) {
-    // Declare shape-specific parameters
     this->declare_parameter("cylinder_height", 2.0);
     this->declare_parameter("cylinder_total_poses", 180);
     this->declare_parameter("cylinder_z_increments", 10);
@@ -52,7 +51,6 @@ class NextBestViewServer : public rclcpp::Node {
     this->declare_parameter("rectangle_height", 1.0);
     this->declare_parameter("rectangle_total_poses", 100);
 
-    // Declare plane-specific parameters
     this->declare_parameter("plane_width", 1.0);
     this->declare_parameter("plane_height", 1.0);
     this->declare_parameter("plane_total_poses", 100);
@@ -76,7 +74,6 @@ class NextBestViewServer : public rclcpp::Node {
         std::bind(&NextBestViewServer::handle_cancel, this, std::placeholders::_1),
         std::bind(&NextBestViewServer::handle_accepted, this, std::placeholders::_1));
 
-    // Initialize the save point cloud action client
     save_point_cloud_client_ = rclcpp_action::create_client<kinova_action_interfaces::action::SavePointCloud>(
         this, "save_point_cloud");
   }
@@ -427,7 +424,7 @@ class NextBestViewServer : public rclcpp::Node {
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
-  /** Execute the action goal */
+  /** Execute the action goal with rotation functionality */
   void execute(const std::shared_ptr<GoalHandleNbv> goal_handle) {
     const auto goal = goal_handle->get_goal();
     auto feedback = std::make_shared<Nbv::Feedback>();
@@ -504,7 +501,7 @@ class NextBestViewServer : public rclcpp::Node {
       selected_poses = selectRandomPoses(reachable_poses, target_locations);
     }
 
-    message = "Moving to selected poses...";
+    message = "Moving to selected poses with rotations...";
     goal_handle->publish_feedback(feedback);
 
     for (const auto& pose : selected_poses) {
@@ -513,25 +510,59 @@ class NextBestViewServer : public rclcpp::Node {
         RCLCPP_INFO(this->get_logger(), "Goal canceled during execution");
         return;
       }
+
+      // Move to initial pose without constraints
       if (!moveToPose(pose)) {
-        RCLCPP_WARN(this->get_logger(), "Failed to move to pose (%.2f, %.2f, %.2f), skipping",
+        RCLCPP_WARN(this->get_logger(), "Failed to move to initial pose (%.2f, %.2f, %.2f), skipping",
                     pose.position.x, pose.position.y, pose.position.z);
         continue;
       }
 
-      // Save point cloud using action client
+      // Save point cloud at initial orientation
       if (!savePointCloud()) {
-        RCLCPP_ERROR(this->get_logger(), "Failed to save point cloud at pose (%.2f, %.2f, %.2f), continuing to next pose",
+        RCLCPP_ERROR(this->get_logger(), "Failed to save point cloud at initial orientation for pose (%.2f, %.2f, %.2f), continuing",
                      pose.position.x, pose.position.y, pose.position.z);
         continue;
+      }
+
+      // Get current joint values for joints 1, 2, 3
+      moveit::core::RobotStatePtr current_state = move_group_interface_->getCurrentState(10);
+      std::vector<double> joint_values;
+      current_state->copyJointGroupPositions("manipulator", joint_values);
+      std::vector<double> fixed_joints = {joint_values[0], joint_values[1], joint_values[2]};
+
+      // Rotate +15 degrees on x-axis with joint constraints
+      geometry_msgs::msg::Pose rotated_pose_plus = rotatePose(pose, 15.0);
+      RCLCPP_INFO(this->get_logger(), "Attempting to move to +15° rotation around x-axis");
+      if (!moveToPose(rotated_pose_plus, true, fixed_joints)) {
+        RCLCPP_WARN(this->get_logger(), "Failed to move to +15 degree rotation for pose (%.2f, %.2f, %.2f), skipping rotation",
+                    pose.position.x, pose.position.y, pose.position.z);
+      } else {
+        if (!savePointCloud()) {
+          RCLCPP_ERROR(this->get_logger(), "Failed to save point cloud at +15 degree rotation for pose (%.2f, %.2f, %.2f), continuing",
+                       pose.position.x, pose.position.y, pose.position.z);
+        }
+      }
+
+      // Rotate -15 degrees on x-axis with joint constraints
+      geometry_msgs::msg::Pose rotated_pose_minus = rotatePose(pose, -15.0);
+      RCLCPP_INFO(this->get_logger(), "Attempting to move to -15° rotation around x-axis");
+      if (!moveToPose(rotated_pose_minus, true, fixed_joints)) {
+        RCLCPP_WARN(this->get_logger(), "Failed to move to -15 degree rotation for pose (%.2f, %.2f, %.2f), skipping rotation",
+                    pose.position.x, pose.position.y, pose.position.z);
+      } else {
+        if (!savePointCloud()) {
+          RCLCPP_ERROR(this->get_logger(), "Failed to save point cloud at -15 degree rotation for pose (%.2f, %.2f, %.2f), continuing",
+                       pose.position.x, pose.position.y, pose.position.z);
+        }
       }
     }
 
     result->success = true;
     if (goal->visit_all) {
-      RCLCPP_INFO(this->get_logger(), "Visited all %zu reachable locations", selected_poses.size());
+      RCLCPP_INFO(this->get_logger(), "Visited all %zu reachable locations with rotations", selected_poses.size());
     } else {
-      RCLCPP_INFO(this->get_logger(), "Visited %zu of %d requested locations",
+      RCLCPP_INFO(this->get_logger(), "Visited %zu of %d requested locations with rotations",
                   selected_poses.size(), goal->location_number);
     }
     goal_handle->succeed(result);
@@ -632,6 +663,32 @@ class NextBestViewServer : public rclcpp::Node {
                    static_cast<int>(wrapped_result.code));
       return false;
     }
+  }
+
+  /** Rotate a pose around the x-axis by a specified angle */
+  geometry_msgs::msg::Pose rotatePose(const geometry_msgs::msg::Pose& original_pose, double angle_degrees) {
+    double angle_radians = angle_degrees * M_PI / 180.0;
+    Eigen::Quaterniond original_quat(
+        original_pose.orientation.w,
+        original_pose.orientation.x,
+        original_pose.orientation.y,
+        original_pose.orientation.z
+    );
+
+    // Create rotation quaternion for x-axis rotation
+    Eigen::Quaterniond rotation_quat(Eigen::AngleAxisd(angle_radians, Eigen::Vector3d::UnitX()));
+
+    // Apply rotation to the original orientation
+    Eigen::Quaterniond new_quat = original_quat * rotation_quat;
+    new_quat.normalize();
+
+    geometry_msgs::msg::Pose rotated_pose = original_pose;
+    rotated_pose.orientation.x = new_quat.x();
+    rotated_pose.orientation.y = new_quat.y();
+    rotated_pose.orientation.z = new_quat.z();
+    rotated_pose.orientation.w = new_quat.w();
+
+    return rotated_pose;
   }
 
   /** Handle goal cancellation */
