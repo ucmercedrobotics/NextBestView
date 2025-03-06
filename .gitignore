@@ -12,6 +12,10 @@ log/
 # Moveit IK files
 *.ikcache
 
+#point clouds
+src/next_best_view/point_clouds/
+src/next_best_view/merged_pointclouds/
+
 # C extensions
 *.so
 
