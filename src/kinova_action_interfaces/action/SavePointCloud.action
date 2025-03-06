@@ -1,0 +1,8 @@
+# Goal: Request to start saving a point cloud
+bool start_saving
+---
+# Result: Indicates whether the save was successful
+bool success
+---
+# Feedback: Provides status updates during processing
+string status

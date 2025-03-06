@@ -170,6 +170,7 @@ target_compile_features(point_cloud_saver PUBLIC c_std_99 cxx_std_17)  # Require
 ament_target_dependencies(
   point_cloud_saver
   "rclcpp"
+  "rclcpp_action"
   "std_msgs"
   "sensor_msgs"
   "pcl_conversions"
@@ -179,6 +180,9 @@ ament_target_dependencies(
   "tf2"
   "tf2_ros"
   "rcpputils"
+  "kinova_action_interfaces"
+
+
 )
 
 target_compile_features(create_point_cloud2 PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
@@ -204,6 +208,7 @@ target_compile_features(merge_point_clouds PUBLIC c_std_99 cxx_std_17)  # Requir
 ament_target_dependencies(
   merge_point_clouds
   "rclcpp"
+  "rclcpp_action"
   "std_msgs"
   "sensor_msgs"
   "pcl_conversions"
@@ -216,6 +221,8 @@ ament_target_dependencies(
   "geometry_msgs"
   "OpenCV"
   "tf2_sensor_msgs"
+  "kinova_action_interfaces"
+
 
 )
 

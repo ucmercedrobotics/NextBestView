@@ -26,6 +26,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/MoveTo.action"
   "action/NextBestView.action"
   "action/FilterPointCloud.action"
+  "action/SavePointCloud.action"
+  "action/MergePointClouds.action"
   DEPENDENCIES sensor_msgs geometry_msgs std_msgs
 )
 

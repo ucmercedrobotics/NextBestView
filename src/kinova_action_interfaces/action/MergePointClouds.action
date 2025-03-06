@@ -1,0 +1,8 @@
+# Goal: A boolean to trigger the merging process
+bool start_merging
+---
+# Result: A boolean indicating whether the merging and saving were successful
+bool success
+---
+# Feedback: A string providing status updates during the process
+string status
