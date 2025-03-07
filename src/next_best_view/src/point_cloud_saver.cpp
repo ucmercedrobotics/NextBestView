@@ -4,7 +4,12 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
-#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+#include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
+
+// New PCL headers for plane segmentation and voxel grid filtering
+#include <pcl/filters/extract_indices.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/segmentation/sac_segmentation.h>
 
 #include <filesystem>
 #include <memory>
@@ -16,9 +21,7 @@
 
 #include "kinova_action_interfaces/action/save_point_cloud.hpp"
 
-// Define the action type alias in the global scope
 using SavePointCloud = kinova_action_interfaces::action::SavePointCloud;
-
 namespace fs = std::filesystem;
 
 class PointCloudSaverNode : public rclcpp::Node {
@@ -36,57 +39,48 @@ class PointCloudSaverNode : public rclcpp::Node {
     distance_limit_ = this->get_parameter("distance_limit").as_double();
     distance_below_ = this->get_parameter("distance_below").as_double();
 
-    // Log parameter values for debugging
     RCLCPP_INFO(this->get_logger(), "Initialized with distance_limit: %.2f meters, distance_below: %.2f meters",
                 distance_limit_, distance_below_);
 
-    // Determine the save directory: one level above the source file's directory
+    // Set up save directory
     fs::path source_file_path = fs::path(__FILE__);
     fs::path parent_dir = source_file_path.parent_path().parent_path();
     fs::path save_dir = parent_dir / "point_clouds";
-
-    // Create directory if it doesn’t exist
     if (!fs::exists(save_dir)) {
-      if (fs::create_directories(save_dir)) {
-        RCLCPP_INFO(this->get_logger(), "Created point_clouds directory: %s", save_dir.c_str());
-      } else {
-        RCLCPP_ERROR(this->get_logger(), "Failed to create point_clouds directory: %s", save_dir.c_str());
-      }
+      fs::create_directories(save_dir);
+      RCLCPP_INFO(this->get_logger(), "Created point_clouds directory: %s", save_dir.c_str());
     } else {
       RCLCPP_INFO(this->get_logger(), "Using existing point_clouds directory: %s", save_dir.c_str());
     }
     save_directory_ = save_dir.string() + "/";
 
-    // Initialize TF2 buffer and listener
+    // Initialize TF2
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-    // Define QoS profile: Best Effort, Keep Last with depth 1
+    // QoS profile
     auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort();
 
-    // Subscription for point cloud data
+    // Subscription
     pointcloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
         "/camera/depth/color/points", qos,
         std::bind(&PointCloudSaverNode::pointcloudCallback, this, std::placeholders::_1));
 
-    // Action server for saving point clouds
+    // Action server
     action_server_ = rclcpp_action::create_server<SavePointCloud>(
-        this,
-        "save_pointcloud",
+        this, "save_pointcloud",
         std::bind(&PointCloudSaverNode::handle_goal, this, std::placeholders::_1, std::placeholders::_2),
         std::bind(&PointCloudSaverNode::handle_cancel, this, std::placeholders::_1),
-        std::bind(&PointCloudSaverNode::handle_accepted, this, std::placeholders::_1)
-    );
+        std::bind(&PointCloudSaverNode::handle_accepted, this, std::placeholders::_1));
 
     RCLCPP_INFO(this->get_logger(), "PointCloudSaverNode initialized.");
   }
 
  private:
-  // Handle new goal requests
   rclcpp_action::GoalResponse handle_goal(
       const rclcpp_action::GoalUUID& uuid,
       std::shared_ptr<const SavePointCloud::Goal> goal) {
-    (void)uuid; // Unused
+    (void)uuid;
     if (!goal->start_saving) {
       RCLCPP_INFO(this->get_logger(), "Received goal with start_saving=false, rejecting");
       return rclcpp_action::GoalResponse::REJECT;
@@ -100,7 +94,6 @@ class PointCloudSaverNode : public rclcpp::Node {
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
-  // Handle goal cancellation
   rclcpp_action::CancelResponse handle_cancel(
       const std::shared_ptr<rclcpp_action::ServerGoalHandle<SavePointCloud>> goal_handle) {
     (void)goal_handle;
@@ -108,33 +101,29 @@ class PointCloudSaverNode : public rclcpp::Node {
     return rclcpp_action::CancelResponse::ACCEPT;
   }
 
-  // Handle accepted goals
   void handle_accepted(const std::shared_ptr<rclcpp_action::ServerGoalHandle<SavePointCloud>> goal_handle) {
     std::lock_guard<std::mutex> lock(goal_mutex_);
     current_goal_handle_ = goal_handle;
   }
 
-  // Process incoming point clouds
   void pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
     std::shared_ptr<rclcpp_action::ServerGoalHandle<SavePointCloud>> goal_handle;
     {
       std::lock_guard<std::mutex> lock(goal_mutex_);
-      if (current_goal_handle_ == nullptr) {
-        return; // No active goal, skip processing
-      }
+      if (current_goal_handle_ == nullptr) return;
       goal_handle = current_goal_handle_;
     }
 
-    // Feedback: Point cloud received
     auto feedback = std::make_shared<SavePointCloud::Feedback>();
     feedback->status = "received point cloud";
     goal_handle->publish_feedback(feedback);
 
-    // Step 1: Convert ROS PointCloud2 to PCL format
+    // Step 1: Convert to PCL
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
     pcl::fromROSMsg(*msg, cloud);
+    RCLCPP_INFO(this->get_logger(), "Initial points: %zu", cloud.points.size());
 
-    // Step 2: Filter points based on distance from sensor
+    // Step 2: Filter by distance from sensor
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
     filtered_cloud->header = cloud.header;
     double distance_limit_sq = distance_limit_ * distance_limit_;
@@ -147,17 +136,15 @@ class PointCloudSaverNode : public rclcpp::Node {
     filtered_cloud->width = filtered_cloud->points.size();
     filtered_cloud->height = 1;
     filtered_cloud->is_dense = true;
+    RCLCPP_INFO(this->get_logger(), "After distance filter: %zu points", filtered_cloud->points.size());
 
-    // Feedback: Filtered point cloud
     feedback->status = "filtered point cloud";
     goal_handle->publish_feedback(feedback);
 
-    // Step 3: Convert filtered cloud back to ROS message for transformation
+    // Step 3: Transform to target frame
     sensor_msgs::msg::PointCloud2 filtered_msg;
     pcl::toROSMsg(*filtered_cloud, filtered_msg);
     filtered_msg.header = msg->header;
-
-    // Step 4: Transform to target frame
     sensor_msgs::msg::PointCloud2 transformed_msg;
     try {
       tf_buffer_->transform(filtered_msg, transformed_msg, target_frame_, tf2::Duration(std::chrono::seconds(1)));
@@ -173,31 +160,79 @@ class PointCloudSaverNode : public rclcpp::Node {
       return;
     }
 
-    // Feedback: Transformed point cloud
     feedback->status = "transformed point cloud";
     goal_handle->publish_feedback(feedback);
 
-    // Step 5: Convert transformed message back to PCL format
+    // Step 4: Convert back to PCL and filter by z-threshold
     pcl::PointCloud<pcl::PointXYZRGB> transformed_cloud;
     pcl::fromROSMsg(transformed_msg, transformed_cloud);
-
-    // Step 6: Filter points below base_link’s z-axis threshold
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr final_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-    final_cloud->header = transformed_cloud.header;
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr z_filtered_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    z_filtered_cloud->header = transformed_cloud.header;
     for (const auto& point : transformed_cloud.points) {
       if (point.z >= -distance_below_) {
-        final_cloud->points.push_back(point);
+        z_filtered_cloud->points.push_back(point);
       }
     }
-    final_cloud->width = final_cloud->points.size();
-    final_cloud->height = 1;
-    final_cloud->is_dense = true;
+    z_filtered_cloud->width = z_filtered_cloud->points.size();
+    z_filtered_cloud->height = 1;
+    z_filtered_cloud->is_dense = true;
+    RCLCPP_INFO(this->get_logger(), "After z-filter: %zu points", z_filtered_cloud->points.size());
 
-    // Feedback: Filtered below threshold
     feedback->status = "filtered below threshold";
     goal_handle->publish_feedback(feedback);
 
-    // Step 7: Save the final filtered point cloud
+    // Step 5: Plane segmentation to remove largest plane (e.g., table or floor)
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_no_plane(new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::SACSegmentation<pcl::PointXYZRGB> seg;
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType(pcl::SACMODEL_PLANE);
+    seg.setMethodType(pcl::SAC_RANSAC);
+    seg.setDistanceThreshold(0.01); // 1cm, tune this based on noise level
+    seg.setInputCloud(z_filtered_cloud);
+    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+    seg.segment(*inliers, *coefficients);
+
+    if (inliers->indices.empty()) {
+      RCLCPP_WARN(this->get_logger(), "No plane found, keeping original cloud");
+      *cloud_no_plane = *z_filtered_cloud;
+    } else {
+      pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+      extract.setInputCloud(z_filtered_cloud);
+      extract.setIndices(inliers);
+      extract.setNegative(true); // Keep points not on the plane
+      extract.filter(*cloud_no_plane);
+      RCLCPP_INFO(this->get_logger(), "After plane removal: %zu points", cloud_no_plane->points.size());
+    }
+
+    feedback->status = "plane removed";
+    goal_handle->publish_feedback(feedback);
+
+    // Step 6: Voxel grid filtering to downsample and reduce noise
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr final_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::VoxelGrid<pcl::PointXYZRGB> voxel_grid;
+    voxel_grid.setInputCloud(cloud_no_plane);
+    voxel_grid.setLeafSize(0.01f, 0.01f, 0.01f); // 1cm voxels, adjust as needed
+    voxel_grid.filter(*final_cloud);
+    RCLCPP_INFO(this->get_logger(), "After voxel grid: %zu points", final_cloud->points.size());
+
+    feedback->status = "downsampled point cloud";
+    goal_handle->publish_feedback(feedback);
+
+    // Step 7: Check if final cloud is empty
+    if (final_cloud->points.empty()) {
+      RCLCPP_WARN(this->get_logger(), "Final point cloud is empty after filtering");
+      auto result = std::make_shared<SavePointCloud::Result>();
+      result->success = false;
+      goal_handle->succeed(result);
+      {
+        std::lock_guard<std::mutex> lock(goal_mutex_);
+        current_goal_handle_ = nullptr;
+      }
+      return;
+    }
+
+    // Step 8: Save the final point cloud
     std::string filename = save_directory_ + "pointcloud_" + std::to_string(file_counter_++) + ".pcd";
     bool save_success = false;
     for (int i = 0; i <= save_retries_; ++i) {
@@ -215,38 +250,29 @@ class PointCloudSaverNode : public rclcpp::Node {
       }
     }
 
-    // Feedback: Saved or failed to save
     feedback->status = save_success ? "saved point cloud" : "failed to save point cloud";
     goal_handle->publish_feedback(feedback);
 
-    // Set result and complete the action
     auto result = std::make_shared<SavePointCloud::Result>();
     result->success = save_success;
     goal_handle->succeed(result);
 
-    // Reset the goal handle
     {
       std::lock_guard<std::mutex> lock(goal_mutex_);
       current_goal_handle_ = nullptr;
     }
   }
 
-  // Parameters
   std::string target_frame_;
   int save_retries_;
   double distance_limit_;
   double distance_below_;
   std::string save_directory_;
-
-  // State variables
   int file_counter_;
 
-  // ROS and TF2 components
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_sub_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
-
-  // Action server components
   rclcpp_action::Server<SavePointCloud>::SharedPtr action_server_;
   std::mutex goal_mutex_;
   std::shared_ptr<rclcpp_action::ServerGoalHandle<SavePointCloud>> current_goal_handle_;

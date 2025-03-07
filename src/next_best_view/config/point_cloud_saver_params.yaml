@@ -1,7 +1,6 @@
-pointcloud_saver_node:
+point_cloud_saver:
   ros__parameters:
-    save_interval: 5.0          # Time in seconds between consecutive saves
     target_frame: "base_link"   # Frame to transform the point cloud to
     save_retries: 5             # Number of retries for saving the file
-    distance_limit: 1.0    # Example value
-    distance_below: 0.5    # Example value
+    distance_limit: 3.0    # Example value
+    distance_below: 0.6    # Example value
