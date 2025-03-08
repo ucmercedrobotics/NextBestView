@@ -187,7 +187,7 @@ class PointCloudSaverNode : public rclcpp::Node {
     seg.setOptimizeCoefficients(true);
     seg.setModelType(pcl::SACMODEL_PLANE);
     seg.setMethodType(pcl::SAC_RANSAC);
-    seg.setDistanceThreshold(0.01); // 1cm, tune this based on noise level
+    seg.setDistanceThreshold(0.005); // 1cm, tune this based on noise level
     seg.setInputCloud(z_filtered_cloud);
     pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
     pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
@@ -212,7 +212,7 @@ class PointCloudSaverNode : public rclcpp::Node {
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr final_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
     pcl::VoxelGrid<pcl::PointXYZRGB> voxel_grid;
     voxel_grid.setInputCloud(cloud_no_plane);
-    voxel_grid.setLeafSize(0.01f, 0.01f, 0.01f); // 1cm voxels, adjust as needed
+    voxel_grid.setLeafSize(0.001f, 0.001f, 0.001f); // 1cm voxels, adjust as needed
     voxel_grid.filter(*final_cloud);
     RCLCPP_INFO(this->get_logger(), "After voxel grid: %zu points", final_cloud->points.size());
 

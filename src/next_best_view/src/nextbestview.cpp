@@ -176,6 +176,15 @@ class NextBestViewServer : public rclcpp::Node {
   }
 
   /** Generate poses based on shape type */
+  // Purpose: Generates a set of poses around an object based on its specified shape.
+  // Parameters:
+
+  //     shape: Type of shape (e.g., "cylinder", "sphere").
+  //     object_position: Center point of the object.
+  //     distance: Distance from the object where poses are generated.
+
+  // Details: Delegates to specific shape-based functions (e.g., generateCylinderPoints) and logs an error for unknown shapes.
+  // Output: Vector of geometry_msgs::msg::Pose objects representing the generated poses.
   std::vector<geometry_msgs::msg::Pose> generatePoses(const std::string& shape,
                                                       const geometry_msgs::msg::Point& object_position,
                                                       float distance) {
@@ -343,6 +352,14 @@ class NextBestViewServer : public rclcpp::Node {
   }
 
   /** Set orientation of the pose to face the object */
+  // Purpose: Orients a pose so the end-effector faces the object.
+  // Parameters:
+
+  //     pose: Pose to be oriented (modified in place).
+  //     object_position: Target point to face.
+
+  // Details: Computes a rotation matrix using Eigen, aligning the z-axis towards the object, y-axis vertically, and x-axis as their cross product. Converts to a quaternion for the pose’s orientation.
+  // Output: None (modifies pose).
   void setOrientation(geometry_msgs::msg::Pose& pose, const geometry_msgs::msg::Point& object_position) {
     Eigen::Vector3d z_axis_target(object_position.x - pose.position.x,
                                   object_position.y - pose.position.y,
@@ -618,52 +635,85 @@ class NextBestViewServer : public rclcpp::Node {
 
   /** Move to a specified pose */
   bool moveToPose(const geometry_msgs::msg::Pose& target_pose,
-                  bool constrain_joints = false,
-                  const std::vector<double>& fixed_joint_values = {}) {
-    moveit::core::RobotStatePtr current_state = move_group_interface_->getCurrentState(10);
-    if (!current_state) {
+    bool constrain_joints = false,
+          const std::vector<double>& fixed_joint_values = {}) {
+      // Get current state
+      moveit::core::RobotStatePtr current_state = move_group_interface_->getCurrentState(10);
+      if (!current_state) {
       RCLCPP_ERROR(this->get_logger(), "Failed to get current state");
       return false;
-    }
-
-    if (constrain_joints && fixed_joint_values.size() >= 3) {
-      const moveit::core::JointModelGroup* joint_model_group =
-          move_group_interface_->getRobotModel()->getJointModelGroup("manipulator");
-      std::vector<std::string> joint_names = joint_model_group->getJointModelNames();
-
-      for (size_t i = 0; i < 3 && i < joint_names.size(); ++i) {
-        const moveit::core::JointModel* joint_model =
-            joint_model_group->getJointModel(joint_names[i]);
-        current_state->setJointPositions(joint_model, &fixed_joint_values[i]);
-        current_state->enforceBounds();
       }
-    }
 
-    std::vector<double> joint_values;
-    bool found_ik = current_state->setFromIK(
-        move_group_interface_->getRobotModel()->getJointModelGroup("manipulator"),
-        target_pose, 1.0);
-    if (!found_ik) {
-      RCLCPP_ERROR(this->get_logger(), "No IK solution found for pose (%.2f, %.2f, %.2f)",
-                   target_pose.position.x, target_pose.position.y, target_pose.position.z);
+      // Apply joint constraints for rotations (±15°)
+      if (constrain_joints && fixed_joint_values.size() >= 3) {
+      const moveit::core::JointModelGroup* joint_model_group =
+      move_group_interface_->getRobotModel()->getJointModelGroup("manipulator");
+      std::vector<std::string> joint_names = joint_model_group->getJointModelNames();
+      for (size_t i = 0; i < 3 && i < joint_names.size(); ++i) {
+      const moveit::core::JointModel* joint_model =
+          joint_model_group->getJointModel(joint_names[i]);
+      current_state->setJointPositions(joint_model, &fixed_joint_values[i]);
+      current_state->enforceBounds();
+      }
+      }
+
+      // Get current joint values
+      const moveit::core::JointModelGroup* jmg = 
+      move_group_interface_->getRobotModel()->getJointModelGroup("manipulator");
+      std::vector<double> current_joints;
+      current_state->copyJointGroupPositions(jmg, current_joints);
+
+      // Solve IK multiple times to find the best solution
+      double min_displacement = std::numeric_limits<double>::max();
+      std::vector<double> best_solution;
+      int num_attempts = 10; // Number of IK attempts
+      double timeout = 1.0;  // Timeout per attempt in seconds
+
+      for (int attempt = 0; attempt < num_attempts; ++attempt) {
+      moveit::core::RobotStatePtr temp_state = 
+      std::make_shared<moveit::core::RobotState>(*current_state);
+      // Randomize starting configuration to explore different solutions
+      temp_state->setToRandomPositions(jmg);
+      if (temp_state->setFromIK(jmg, target_pose, timeout)) {
+      std::vector<double> solution;
+      temp_state->copyJointGroupPositions(jmg, solution);
+      // Compute joint displacement (sum of absolute differences)
+      double displacement = 0.0;
+      for (size_t i = 0; i < solution.size(); ++i) {
+          displacement += std::abs(solution[i] - current_joints[i]);
+      }
+      if (displacement < min_displacement) {
+          min_displacement = displacement;
+          best_solution = solution;
+      }
+      }
+      }
+
+      if (best_solution.empty()) {
+      RCLCPP_ERROR(this->get_logger(), "No IK solution found for pose (%.2f, %.2f, %.2f) after %d attempts",
+              target_pose.position.x, target_pose.position.y, target_pose.position.z, num_attempts);
       return false;
-    }
+      }
 
-    current_state->copyJointGroupPositions("manipulator", joint_values);
-    move_group_interface_->setPlannerId("PTP");
-    move_group_interface_->setJointValueTarget(joint_values);
-    moveit::planning_interface::MoveGroupInterface::Plan my_plan_arm;
-    bool success = (move_group_interface_->plan(my_plan_arm) ==
-                    moveit::core::MoveItErrorCode::SUCCESS);
-    if (!success) {
+      // Configure planner settings
+      move_group_interface_->setPlannerId("RRTConnect"); // Use RRTConnect instead of PTP
+      move_group_interface_->setPlanningTime(5.0);       // Increase planning time
+      move_group_interface_->setNumPlanningAttempts(10); // Increase attempts
+      move_group_interface_->setJointValueTarget(best_solution);
+
+      // Plan and execute
+      moveit::planning_interface::MoveGroupInterface::Plan my_plan_arm;
+      bool success = (move_group_interface_->plan(my_plan_arm) == 
+              moveit::core::MoveItErrorCode::SUCCESS);
+      if (!success) {
       RCLCPP_ERROR(this->get_logger(), "Failed to plan to pose (%.2f, %.2f, %.2f)",
-                   target_pose.position.x, target_pose.position.y, target_pose.position.z);
+              target_pose.position.x, target_pose.position.y, target_pose.position.z);
       return false;
-    }
+      }
 
-    move_group_interface_->execute(my_plan_arm);
-    move_group_interface_->setStartStateToCurrentState();
-    return true;
+      move_group_interface_->execute(my_plan_arm);
+      move_group_interface_->setStartStateToCurrentState();
+      return true;
   }
 
   /** Save the point cloud at the current pose using the save_point_cloud action */
