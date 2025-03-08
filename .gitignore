@@ -15,6 +15,7 @@ log/
 #point clouds
 src/next_best_view/point_clouds/
 src/next_best_view/merged_pointclouds/
+src/next_best_view/filtered_pointclouds/
 
 # C extensions
 *.so
