@@ -24,6 +24,18 @@ namespace fs = std::filesystem;
 class CanopyVolumeNode : public rclcpp::Node {
  public:
   CanopyVolumeNode() : Node("canopy_volume_node") {
+    // Declare parameters with default values
+    this->declare_parameter<double>("filter_min_z", 0.0);
+    this->declare_parameter<double>("filter_max_z", 0.6);
+
+    // Retrieve parameter values and store them in member variables
+    filter_min_z_ = this->get_parameter("filter_min_z").as_double();
+    filter_max_z_ = this->get_parameter("filter_max_z").as_double();
+
+    // Log the loaded values for debugging
+    RCLCPP_INFO(this->get_logger(), "Using filter limits: min_z=%.2f, max_z=%.2f", 
+                filter_min_z_, filter_max_z_);
+
     // Set directories
     merged_directory_ = "src/next_best_view/merged_pointclouds/";
     info_directory_ = "src/next_best_view/tree_informations/";
@@ -182,7 +194,7 @@ class CanopyVolumeNode : public rclcpp::Node {
     pcl::PassThrough<pcl::PointXYZ> pass;
     pass.setInputCloud(cloud);
     pass.setFilterFieldName("z");
-    pass.setFilterLimits(0.00, 0.6);
+    pass.setFilterLimits(filter_min_z_, filter_max_z_);  // Use configurable member variables
     pcl::PointCloud<pcl::PointXYZ>::Ptr upper_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     pass.filter(*upper_cloud);
 
@@ -257,9 +269,14 @@ class CanopyVolumeNode : public rclcpp::Node {
     return (volume > 0.0) ? canopy_cloud->size() / volume : 0.0;
   }
 
+  // Member variables for directories and action server
   std::string merged_directory_;
   std::string info_directory_;
   rclcpp_action::Server<ProcessTreeData>::SharedPtr action_server_;
+
+  // New member variables for configurable filter limits
+  double filter_min_z_;
+  double filter_max_z_;
 };
 
 int main(int argc, char** argv) {
