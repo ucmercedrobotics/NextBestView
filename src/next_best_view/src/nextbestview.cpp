@@ -32,7 +32,6 @@ class NextBestViewServer : public rclcpp::Node {
   using Nbv = kinova_action_interfaces::action::NextBestView;
   using GoalHandleNbv = rclcpp_action::ServerGoalHandle<Nbv>;
 
-  /** Constructor: Declare parameters only */
   explicit NextBestViewServer(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
       : Node("nbv_server", options) {
     this->declare_parameter("cylinder_height", 2.0);
@@ -56,7 +55,6 @@ class NextBestViewServer : public rclcpp::Node {
     this->declare_parameter("plane_total_poses", 100);
   }
 
-  /** Initialize MoveIt and ROS components after construction */
   void initialize() {
     move_group_interface_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(
         shared_from_this(), "manipulator");
@@ -76,39 +74,38 @@ class NextBestViewServer : public rclcpp::Node {
 
     save_point_cloud_client_ = rclcpp_action::create_client<kinova_action_interfaces::action::SavePointCloud>(
         this, "save_pointcloud");
+
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
   }
 
  private:
-  // Member variables
   rclcpp_action::Server<Nbv>::SharedPtr action_server_;
   rclcpp_action::Client<kinova_action_interfaces::action::SavePointCloud>::SharedPtr save_point_cloud_client_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_interface_;
   std::shared_ptr<moveit_visual_tools::MoveItVisualTools> visual_tools_;
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
-  // Shape-specific parameters
+  // Shape-specific parameters (unchanged)
   double cylinder_height_;
   int cylinder_total_poses_;
   int cylinder_z_increments_;
   double cylinder_diameter_;
   double cylinder_radius_;
   int cylinder_n_theta_;
-
   double hemisphere_radius_;
   int hemisphere_total_poses_;
-
   double sphere_radius_;
   int sphere_total_poses_;
-
   double rectangle_length_;
   double rectangle_width_;
   double rectangle_height_;
   int rectangle_total_poses_;
-
   double plane_width_;
   double plane_height_;
   int plane_total_poses_;
 
-  /** Compute Euclidean distance between two poses */
   double distanceBetweenPoses(const geometry_msgs::msg::Pose& p1, const geometry_msgs::msg::Pose& p2) {
     double dx = p1.position.x - p2.position.x;
     double dy = p1.position.y - p2.position.y;
@@ -116,7 +113,6 @@ class NextBestViewServer : public rclcpp::Node {
     return std::sqrt(dx * dx + dy * dy + dz * dz);
   }
 
-  /** Solve TSP using a greedy algorithm starting from start_pose */
   std::vector<geometry_msgs::msg::Pose> solveTSP(const std::vector<geometry_msgs::msg::Pose>& poses,
                                                  const geometry_msgs::msg::Pose& start_pose) {
     std::vector<geometry_msgs::msg::Pose> tour;
@@ -146,7 +142,6 @@ class NextBestViewServer : public rclcpp::Node {
     return tour;
   }
 
-  /** Load shape-specific parameters based on the goal */
   void loadShapeParameters(const std::string& shape) {
     if (shape == "cylinder") {
       cylinder_height_ = this->get_parameter("cylinder_height").as_double();
@@ -175,16 +170,6 @@ class NextBestViewServer : public rclcpp::Node {
     }
   }
 
-  /** Generate poses based on shape type */
-  // Purpose: Generates a set of poses around an object based on its specified shape.
-  // Parameters:
-
-  //     shape: Type of shape (e.g., "cylinder", "sphere").
-  //     object_position: Center point of the object.
-  //     distance: Distance from the object where poses are generated.
-
-  // Details: Delegates to specific shape-based functions (e.g., generateCylinderPoints) and logs an error for unknown shapes.
-  // Output: Vector of geometry_msgs::msg::Pose objects representing the generated poses.
   std::vector<geometry_msgs::msg::Pose> generatePoses(const std::string& shape,
                                                       const geometry_msgs::msg::Point& object_position,
                                                       float distance) {
@@ -204,7 +189,6 @@ class NextBestViewServer : public rclcpp::Node {
     }
   }
 
-  /** Generate cylinder poses */
   std::vector<geometry_msgs::msg::Pose> generateCylinderPoints(const geometry_msgs::msg::Point& object_position,
                                                                float radius) {
     std::vector<geometry_msgs::msg::Pose> nbv_poses;
@@ -226,7 +210,6 @@ class NextBestViewServer : public rclcpp::Node {
     return nbv_poses;
   }
 
-  /** Generate hemisphere poses */
   std::vector<geometry_msgs::msg::Pose> generateHemispherePoints(const geometry_msgs::msg::Point& object_position,
                                                                  float radius) {
     std::vector<geometry_msgs::msg::Pose> nbv_poses;
@@ -250,7 +233,6 @@ class NextBestViewServer : public rclcpp::Node {
     return nbv_poses;
   }
 
-  /** Generate sphere poses */
   std::vector<geometry_msgs::msg::Pose> generateSpherePoints(const geometry_msgs::msg::Point& object_position,
                                                              float radius) {
     std::vector<geometry_msgs::msg::Pose> nbv_poses;
@@ -274,7 +256,6 @@ class NextBestViewServer : public rclcpp::Node {
     return nbv_poses;
   }
 
-  /** Generate rectangle poses */
   std::vector<geometry_msgs::msg::Pose> generateRectanglePoints(const geometry_msgs::msg::Point& object_position,
                                                                 float distance) {
     std::vector<geometry_msgs::msg::Pose> nbv_poses;
@@ -302,7 +283,6 @@ class NextBestViewServer : public rclcpp::Node {
     return nbv_poses;
   }
 
-  /** Generate plane poses */
   std::vector<geometry_msgs::msg::Pose> generatePlanePoints(const geometry_msgs::msg::Point& object_position,
                                                             float distance) {
     std::vector<geometry_msgs::msg::Pose> nbv_poses;
@@ -351,30 +331,82 @@ class NextBestViewServer : public rclcpp::Node {
     return nbv_poses;
   }
 
-  /** Set orientation of the pose to face the object */
-  // Purpose: Orients a pose so the end-effector faces the object.
-  // Parameters:
+  /** Compute the end-effector pose to achieve the desired camera pose */
+  bool computeEndEffectorPose(const geometry_msgs::msg::Pose& desired_camera_pose,
+                              geometry_msgs::msg::Pose& end_effector_pose) {
+    std::string end_effector_link = move_group_interface_->getEndEffectorLink();
+    geometry_msgs::msg::TransformStamped T_ec;
+    try {
+      T_ec = tf_buffer_->lookupTransform(end_effector_link, "camera_color_frame", tf2::TimePointZero);
+    } catch (tf2::TransformException& ex) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to get transform from %s to camera_color_frame: %s",
+                   end_effector_link.c_str(), ex.what());
+      return false;
+    }
 
-  //     pose: Pose to be oriented (modified in place).
-  //     object_position: Target point to face.
+    tf2::Transform T_ec_tf;
+    tf2::fromMsg(T_ec.transform, T_ec_tf);
 
-  // Details: Computes a rotation matrix using Eigen, aligning the z-axis towards the object, y-axis vertically, and x-axis as their cross product. Converts to a quaternion for the pose’s orientation.
-  // Output: None (modifies pose).
+    tf2::Transform T_wc;
+    tf2::fromMsg(desired_camera_pose, T_wc);
+
+    tf2::Transform T_ec_inv = T_ec_tf.inverse();
+    tf2::Transform T_we = T_wc * T_ec_inv;
+
+    tf2::toMsg(T_we, end_effector_pose);
+    return true;
+  }
+
+  /** Get the current camera pose */
+  geometry_msgs::msg::Pose getCurrentCameraPose() {
+    std::string end_effector_link = move_group_interface_->getEndEffectorLink();
+    geometry_msgs::msg::PoseStamped current_end_effector_pose = move_group_interface_->getCurrentPose(end_effector_link);
+    geometry_msgs::msg::TransformStamped T_ec;
+    try {
+      T_ec = tf_buffer_->lookupTransform(end_effector_link, "camera_color_frame", tf2::TimePointZero);
+    } catch (tf2::TransformException& ex) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to get transform from %s to camera_color_frame: %s",
+                   end_effector_link.c_str(), ex.what());
+      return geometry_msgs::msg::Pose();
+    }
+    tf2::Transform T_we, T_ec_tf, T_wc;
+    tf2::fromMsg(current_end_effector_pose.pose, T_we);
+    tf2::fromMsg(T_ec.transform, T_ec_tf);
+    T_wc = T_we * T_ec_tf;
+    geometry_msgs::msg::Pose current_camera_pose;
+    tf2::toMsg(T_wc, current_camera_pose);
+    return current_camera_pose;
+  }
+
+  /** Set orientation of the camera frame */
   void setOrientation(geometry_msgs::msg::Pose& pose, const geometry_msgs::msg::Point& object_position) {
+    // Z-axis points towards the object
     Eigen::Vector3d z_axis_target(object_position.x - pose.position.x,
                                   object_position.y - pose.position.y,
                                   object_position.z - pose.position.z);
     z_axis_target.normalize();
 
-    Eigen::Vector3d y_axis_target(0.0, 0.0, 1.0);
-    if (fabs(y_axis_target.dot(z_axis_target)) > 0.99) {
-      y_axis_target = Eigen::Vector3d(0.0, 1.0, 0.0);
+    // If Z-axis is not vertical, X-axis is horizontal (perpendicular to world Z)
+    Eigen::Vector3d x_axis_target;
+    if (std::abs(z_axis_target.z()) > 0.99) {
+      // Z-axis is nearly vertical, choose arbitrary horizontal X-axis
+      x_axis_target = Eigen::Vector3d(1.0, 0.0, 0.0);
+    } else {
+      // X-axis = world Z cross Z_target, ensuring it's horizontal
+      x_axis_target = Eigen::Vector3d(0.0, 0.0, 1.0).cross(z_axis_target);
     }
-    y_axis_target = y_axis_target - y_axis_target.dot(z_axis_target) * z_axis_target;
+    x_axis_target.normalize();
+
+    // Y-axis = Z cross X, points downward when possible
+    Eigen::Vector3d y_axis_target = z_axis_target.cross(x_axis_target);
     y_axis_target.normalize();
 
-    Eigen::Vector3d x_axis_target = y_axis_target.cross(z_axis_target);
-    x_axis_target.normalize();
+    // Ensure Y-axis points downward by checking its Z-component
+    if (y_axis_target.z() > 0) {
+      y_axis_target = -y_axis_target;
+      x_axis_target = y_axis_target.cross(z_axis_target);
+      x_axis_target.normalize();
+    }
 
     Eigen::Matrix3d rotation_matrix;
     rotation_matrix.col(0) = x_axis_target;
@@ -390,7 +422,6 @@ class NextBestViewServer : public rclcpp::Node {
     pose.orientation.w = quat.w();
   }
 
-  /** Handle incoming action goal */
   rclcpp_action::GoalResponse handle_goal(const rclcpp_action::GoalUUID& uuid,
                                           std::shared_ptr<const Nbv::Goal> goal) {
     RCLCPP_INFO(this->get_logger(),
@@ -408,80 +439,69 @@ class NextBestViewServer : public rclcpp::Node {
     visual_tools_->deleteAllMarkers();
     visual_tools_->loadRemoteControl();
 
-    // First collision object (existing)
     moveit_msgs::msg::CollisionObject collision_object;
     collision_object.header.frame_id = move_group_interface_->getPlanningFrame();
     collision_object.id = "object";
     shape_msgs::msg::SolidPrimitive primitive;
     geometry_msgs::msg::Pose object_pose;
-    object_pose.orientation.w = 1.0;  // Identity orientation (no rotation)
+    object_pose.orientation.w = 1.0;
     object_pose.position = goal->object_position;
 
     if (goal->shape_type == "cylinder") {
-        primitive.type = primitive.CYLINDER;
-        primitive.dimensions.resize(2);
-        primitive.dimensions[0] = cylinder_height_;  // Height
-        primitive.dimensions[1] = cylinder_radius_;  // Radius
+      primitive.type = primitive.CYLINDER;
+      primitive.dimensions.resize(2);
+      primitive.dimensions[0] = cylinder_height_;
+      primitive.dimensions[1] = cylinder_radius_;
     } else {
-        primitive.type = primitive.BOX;
-        primitive.dimensions.resize(3);
-        primitive.dimensions[0] = 0.1;  // Length
-        primitive.dimensions[1] = 0.1;  // Width
-        primitive.dimensions[2] = 0.1;  // Height
+      primitive.type = primitive.BOX;
+      primitive.dimensions.resize(3);
+      primitive.dimensions[0] = 0.1;
+      primitive.dimensions[1] = 0.1;
+      primitive.dimensions[2] = 0.1;
     }
 
     collision_object.primitives.push_back(primitive);
     collision_object.primitive_poses.push_back(object_pose);
     collision_object.operation = collision_object.ADD;
 
-    // Second collision object: rectangle
     moveit_msgs::msg::CollisionObject rectangle_collision_object;
     rectangle_collision_object.header.frame_id = move_group_interface_->getPlanningFrame();
     rectangle_collision_object.id = "rectangle_object";
-
     shape_msgs::msg::SolidPrimitive rectangle_primitive;
     rectangle_primitive.type = rectangle_primitive.BOX;
     rectangle_primitive.dimensions.resize(3);
-    rectangle_primitive.dimensions[0] = 1.2;  // Length (x)
-    rectangle_primitive.dimensions[1] = 1.2;  // Width (y)
-    rectangle_primitive.dimensions[2] = 0.2;  // Height (z)
-
+    rectangle_primitive.dimensions[0] = 1.2;
+    rectangle_primitive.dimensions[1] = 1.2;
+    rectangle_primitive.dimensions[2] = 0.2;
     geometry_msgs::msg::Pose rectangle_pose;
-    rectangle_pose.orientation.w = 1.0;  // Identity orientation (no rotation)
+    rectangle_pose.orientation.w = 1.0;
     rectangle_pose.position.x = -0.4;
     rectangle_pose.position.y = 0.4;
     rectangle_pose.position.z = -0.1;
-
     rectangle_collision_object.primitives.push_back(rectangle_primitive);
     rectangle_collision_object.primitive_poses.push_back(rectangle_pose);
     rectangle_collision_object.operation = rectangle_collision_object.ADD;
 
-    // Second collision object: rectangle
     moveit_msgs::msg::CollisionObject control_panel_object;
     control_panel_object.header.frame_id = move_group_interface_->getPlanningFrame();
     control_panel_object.id = "control_panel_object";
-
     shape_msgs::msg::SolidPrimitive control_panel_primitive;
     control_panel_primitive.type = control_panel_primitive.BOX;
     control_panel_primitive.dimensions.resize(3);
-    control_panel_primitive.dimensions[0] = 0.3;  // Length (x)
-    control_panel_primitive.dimensions[1] = 1.2;  // Width (y)
-    control_panel_primitive.dimensions[2] = 1.0;  // Height (z)
-
+    control_panel_primitive.dimensions[0] = 0.3;
+    control_panel_primitive.dimensions[1] = 1.2;
+    control_panel_primitive.dimensions[2] = 1.0;
     geometry_msgs::msg::Pose control_panel_pose;
-    control_panel_pose.orientation.w = 1.0;  // Identity orientation (no rotation)
+    control_panel_pose.orientation.w = 1.0;
     control_panel_pose.position.x = -0.8;
     control_panel_pose.position.y = 0.4;
     control_panel_pose.position.z = 0.3;
-
     control_panel_object.primitives.push_back(control_panel_primitive);
     control_panel_object.primitive_poses.push_back(control_panel_pose);
     control_panel_object.operation = control_panel_object.ADD;
 
-    // Combine both collision objects into the vector
-    std::vector<moveit_msgs::msg::CollisionObject> collision_objects = {collision_object, rectangle_collision_object, control_panel_object};
-
-    // Apply to the planning scene
+    std::vector<moveit_msgs::msg::CollisionObject> collision_objects = {
+        collision_object, rectangle_collision_object, control_panel_object};
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
     planning_scene_interface.applyCollisionObjects(collision_objects);
 
@@ -489,7 +509,6 @@ class NextBestViewServer : public rclcpp::Node {
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
-  /** Execute the action goal with rotation functionality */
   void execute(const std::shared_ptr<GoalHandleNbv> goal_handle) {
     const auto goal = goal_handle->get_goal();
     auto feedback = std::make_shared<Nbv::Feedback>();
@@ -517,20 +536,29 @@ class NextBestViewServer : public rclcpp::Node {
     }
 
     std::vector<geometry_msgs::msg::Pose> reachable_poses;
-    for (const auto& pose : candidate_poses) {
-      double distance_from_base = sqrt(pose.position.x * pose.position.x +
-                                       pose.position.y * pose.position.y +
-                                       pose.position.z * pose.position.z);
+    std::string end_effector_link = move_group_interface_->getEndEffectorLink();
+    for (const auto& camera_pose : candidate_poses) {
+      double distance_from_base = sqrt(camera_pose.position.x * camera_pose.position.x +
+                                       camera_pose.position.y * camera_pose.position.y +
+                                       camera_pose.position.z * camera_pose.position.z);
       if (distance_from_base > 0.891) {
-        visual_tools_->publishZArrow(pose, rviz_visual_tools::RED, rviz_visual_tools::MEDIUM);
+        visual_tools_->publishZArrow(camera_pose, rviz_visual_tools::RED, rviz_visual_tools::MEDIUM);
+        visual_tools_->trigger();
+        continue;
+      }
+
+      geometry_msgs::msg::Pose end_effector_pose;
+      if (!computeEndEffectorPose(camera_pose, end_effector_pose)) {
+        visual_tools_->publishZArrow(camera_pose, rviz_visual_tools::RED, rviz_visual_tools::MEDIUM);
         visual_tools_->trigger();
         continue;
       }
 
       moveit::core::RobotStatePtr current_state = move_group_interface_->getCurrentState(10);
       if (!current_state || !current_state->setFromIK(
-              move_group_interface_->getRobotModel()->getJointModelGroup("manipulator"), pose, 1.0)) {
-        visual_tools_->publishZArrow(pose, rviz_visual_tools::RED, rviz_visual_tools::MEDIUM);
+              move_group_interface_->getRobotModel()->getJointModelGroup("manipulator"),
+              end_effector_pose, end_effector_link, 1.0)) {
+        visual_tools_->publishZArrow(camera_pose, rviz_visual_tools::RED, rviz_visual_tools::MEDIUM);
         visual_tools_->trigger();
         continue;
       }
@@ -542,10 +570,10 @@ class NextBestViewServer : public rclcpp::Node {
       moveit::planning_interface::MoveGroupInterface::Plan my_plan_arm;
       bool success = (move_group_interface_->plan(my_plan_arm) == moveit::core::MoveItErrorCode::SUCCESS);
       if (success) {
-        reachable_poses.push_back(pose);
-        visual_tools_->publishZArrow(pose, rviz_visual_tools::GREEN, rviz_visual_tools::MEDIUM);
+        reachable_poses.push_back(camera_pose);
+        visual_tools_->publishZArrow(camera_pose, rviz_visual_tools::GREEN, rviz_visual_tools::MEDIUM);
       } else {
-        visual_tools_->publishZArrow(pose, rviz_visual_tools::YELLOW, rviz_visual_tools::MEDIUM);
+        visual_tools_->publishZArrow(camera_pose, rviz_visual_tools::YELLOW, rviz_visual_tools::MEDIUM);
       }
       visual_tools_->trigger();
     }
@@ -559,8 +587,8 @@ class NextBestViewServer : public rclcpp::Node {
 
     std::vector<geometry_msgs::msg::Pose> selected_poses;
     if (goal->visit_all) {
-      geometry_msgs::msg::Pose current_pose = move_group_interface_->getCurrentPose().pose;
-      selected_poses = solveTSP(reachable_poses, current_pose);
+      geometry_msgs::msg::Pose current_camera_pose = getCurrentCameraPose();
+      selected_poses = solveTSP(reachable_poses, current_camera_pose);
     } else {
       int target_locations = std::min(goal->location_number, static_cast<int>(reachable_poses.size()));
       selected_poses = selectRandomPoses(reachable_poses, target_locations);
@@ -576,27 +604,23 @@ class NextBestViewServer : public rclcpp::Node {
         return;
       }
 
-      // Move to initial pose without constraints
       if (!moveToPose(pose)) {
         RCLCPP_WARN(this->get_logger(), "Failed to move to initial pose (%.2f, %.2f, %.2f), skipping",
                     pose.position.x, pose.position.y, pose.position.z);
         continue;
       }
 
-      // Save point cloud at initial orientation
       if (!savePointCloud()) {
         RCLCPP_ERROR(this->get_logger(), "Failed to save point cloud at initial orientation for pose (%.2f, %.2f, %.2f), continuing",
                      pose.position.x, pose.position.y, pose.position.z);
         continue;
       }
 
-      // Get current joint values for joints 1, 2, 3
       moveit::core::RobotStatePtr current_state = move_group_interface_->getCurrentState(10);
       std::vector<double> joint_values;
       current_state->copyJointGroupPositions("manipulator", joint_values);
       std::vector<double> fixed_joints = {joint_values[0], joint_values[1], joint_values[2]};
 
-      // Rotate +15 degrees on x-axis with joint constraints
       geometry_msgs::msg::Pose rotated_pose_plus = rotatePose(pose, 15.0);
       RCLCPP_INFO(this->get_logger(), "Attempting to move to +15° rotation around x-axis");
       if (!moveToPose(rotated_pose_plus, true, fixed_joints)) {
@@ -609,7 +633,6 @@ class NextBestViewServer : public rclcpp::Node {
         }
       }
 
-      // Rotate -15 degrees on x-axis with joint constraints
       geometry_msgs::msg::Pose rotated_pose_minus = rotatePose(pose, -15.0);
       RCLCPP_INFO(this->get_logger(), "Attempting to move to -15° rotation around x-axis");
       if (!moveToPose(rotated_pose_minus, true, fixed_joints)) {
@@ -623,6 +646,9 @@ class NextBestViewServer : public rclcpp::Node {
       }
     }
 
+    // Move to Home position after execution
+    moveToHome();
+
     result->success = true;
     if (goal->visit_all) {
       RCLCPP_INFO(this->get_logger(), "Visited all %zu reachable locations with rotations", selected_poses.size());
@@ -633,90 +659,84 @@ class NextBestViewServer : public rclcpp::Node {
     goal_handle->succeed(result);
   }
 
-  /** Move to a specified pose */
-  bool moveToPose(const geometry_msgs::msg::Pose& target_pose,
-    bool constrain_joints = false,
-          const std::vector<double>& fixed_joint_values = {}) {
-      // Get current state
-      moveit::core::RobotStatePtr current_state = move_group_interface_->getCurrentState(10);
-      if (!current_state) {
+  bool moveToPose(const geometry_msgs::msg::Pose& desired_camera_pose,
+                  bool constrain_joints = false,
+                  const std::vector<double>& fixed_joint_values = {}) {
+    geometry_msgs::msg::Pose end_effector_pose;
+    if (!computeEndEffectorPose(desired_camera_pose, end_effector_pose)) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to compute end-effector pose for camera pose (%.2f, %.2f, %.2f)",
+                   desired_camera_pose.position.x, desired_camera_pose.position.y, desired_camera_pose.position.z);
+      return false;
+    }
+
+    moveit::core::RobotStatePtr current_state = move_group_interface_->getCurrentState(10);
+    if (!current_state) {
       RCLCPP_ERROR(this->get_logger(), "Failed to get current state");
       return false;
-      }
+    }
 
-      // Apply joint constraints for rotations (±15°)
-      if (constrain_joints && fixed_joint_values.size() >= 3) {
-      const moveit::core::JointModelGroup* joint_model_group =
-      move_group_interface_->getRobotModel()->getJointModelGroup("manipulator");
-      std::vector<std::string> joint_names = joint_model_group->getJointModelNames();
+    const moveit::core::JointModelGroup* jmg =
+        move_group_interface_->getRobotModel()->getJointModelGroup("manipulator");
+
+    if (constrain_joints && fixed_joint_values.size() >= 3) {
+      std::vector<std::string> joint_names = jmg->getJointModelNames();
       for (size_t i = 0; i < 3 && i < joint_names.size(); ++i) {
-      const moveit::core::JointModel* joint_model =
-          joint_model_group->getJointModel(joint_names[i]);
-      current_state->setJointPositions(joint_model, &fixed_joint_values[i]);
-      current_state->enforceBounds();
+        current_state->setJointPositions(joint_names[i], &fixed_joint_values[i]);
+        current_state->enforceBounds();
       }
-      }
+    }
 
-      // Get current joint values
-      const moveit::core::JointModelGroup* jmg = 
-      move_group_interface_->getRobotModel()->getJointModelGroup("manipulator");
-      std::vector<double> current_joints;
-      current_state->copyJointGroupPositions(jmg, current_joints);
+    std::vector<double> current_joints;
+    current_state->copyJointGroupPositions(jmg, current_joints);
 
-      // Solve IK multiple times to find the best solution
-      double min_displacement = std::numeric_limits<double>::max();
-      std::vector<double> best_solution;
-      int num_attempts = 10; // Number of IK attempts
-      double timeout = 1.0;  // Timeout per attempt in seconds
+    double min_displacement = std::numeric_limits<double>::max();
+    std::vector<double> best_solution;
+    int num_attempts = 10;
+    double timeout = 1.0;
+    std::string end_effector_link = move_group_interface_->getEndEffectorLink();
 
-      for (int attempt = 0; attempt < num_attempts; ++attempt) {
-      moveit::core::RobotStatePtr temp_state = 
-      std::make_shared<moveit::core::RobotState>(*current_state);
-      // Randomize starting configuration to explore different solutions
+    for (int attempt = 0; attempt < num_attempts; ++attempt) {
+      moveit::core::RobotStatePtr temp_state = std::make_shared<moveit::core::RobotState>(*current_state);
       temp_state->setToRandomPositions(jmg);
-      if (temp_state->setFromIK(jmg, target_pose, timeout)) {
-      std::vector<double> solution;
-      temp_state->copyJointGroupPositions(jmg, solution);
-      // Compute joint displacement (sum of absolute differences)
-      double displacement = 0.0;
-      for (size_t i = 0; i < solution.size(); ++i) {
+      if (temp_state->setFromIK(jmg, end_effector_pose, end_effector_link, timeout)) {
+        std::vector<double> solution;
+        temp_state->copyJointGroupPositions(jmg, solution);
+        double displacement = 0.0;
+        for (size_t i = 0; i < solution.size(); ++i) {
           displacement += std::abs(solution[i] - current_joints[i]);
-      }
-      if (displacement < min_displacement) {
+        }
+        if (displacement < min_displacement) {
           min_displacement = displacement;
           best_solution = solution;
+        }
       }
-      }
-      }
+    }
 
-      if (best_solution.empty()) {
-      RCLCPP_ERROR(this->get_logger(), "No IK solution found for pose (%.2f, %.2f, %.2f) after %d attempts",
-              target_pose.position.x, target_pose.position.y, target_pose.position.z, num_attempts);
+    if (best_solution.empty()) {
+      RCLCPP_ERROR(this->get_logger(), "No IK solution found for camera pose (%.2f, %.2f, %.2f) after %d attempts",
+                   desired_camera_pose.position.x, desired_camera_pose.position.y,
+                   desired_camera_pose.position.z, num_attempts);
       return false;
-      }
+    }
 
-      // Configure planner settings
-      move_group_interface_->setPlannerId("RRTConnect"); // Use RRTConnect instead of PTP
-      move_group_interface_->setPlanningTime(5.0);       // Increase planning time
-      move_group_interface_->setNumPlanningAttempts(10); // Increase attempts
-      move_group_interface_->setJointValueTarget(best_solution);
+    move_group_interface_->setPlannerId("RRTConnect");
+    move_group_interface_->setPlanningTime(5.0);
+    move_group_interface_->setNumPlanningAttempts(10);
+    move_group_interface_->setJointValueTarget(best_solution);
 
-      // Plan and execute
-      moveit::planning_interface::MoveGroupInterface::Plan my_plan_arm;
-      bool success = (move_group_interface_->plan(my_plan_arm) == 
-              moveit::core::MoveItErrorCode::SUCCESS);
-      if (!success) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to plan to pose (%.2f, %.2f, %.2f)",
-              target_pose.position.x, target_pose.position.y, target_pose.position.z);
+    moveit::planning_interface::MoveGroupInterface::Plan my_plan_arm;
+    bool success = (move_group_interface_->plan(my_plan_arm) == moveit::core::MoveItErrorCode::SUCCESS);
+    if (!success) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to plan to camera pose (%.2f, %.2f, %.2f)",
+                   desired_camera_pose.position.x, desired_camera_pose.position.y, desired_camera_pose.position.z);
       return false;
-      }
+    }
 
-      move_group_interface_->execute(my_plan_arm);
-      move_group_interface_->setStartStateToCurrentState();
-      return true;
+    move_group_interface_->execute(my_plan_arm);
+    move_group_interface_->setStartStateToCurrentState();
+    return true;
   }
 
-  /** Save the point cloud at the current pose using the save_point_cloud action */
   bool savePointCloud() {
     if (!save_point_cloud_client_->wait_for_action_server(std::chrono::seconds(10))) {
       RCLCPP_ERROR(this->get_logger(), "Save point cloud action server not available");
@@ -727,7 +747,6 @@ class NextBestViewServer : public rclcpp::Node {
     goal.start_saving = true;
 
     auto send_goal_options = rclcpp_action::Client<kinova_action_interfaces::action::SavePointCloud>::SendGoalOptions();
-
     auto goal_handle_future = save_point_cloud_client_->async_send_goal(goal, send_goal_options);
 
     if (goal_handle_future.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
@@ -748,22 +767,15 @@ class NextBestViewServer : public rclcpp::Node {
     }
 
     auto wrapped_result = result_future.get();
-    if (wrapped_result.code == rclcpp_action::ResultCode::SUCCEEDED) {
-      if (wrapped_result.result->success) {
-        RCLCPP_INFO(this->get_logger(), "Point cloud saved successfully");
-        return true;
-      } else {
-        RCLCPP_ERROR(this->get_logger(), "Failed to save point cloud (action succeeded but result indicates failure)");
-        return false;
-      }
+    if (wrapped_result.code == rclcpp_action::ResultCode::SUCCEEDED && wrapped_result.result->success) {
+      RCLCPP_INFO(this->get_logger(), "Point cloud saved successfully");
+      return true;
     } else {
-      RCLCPP_ERROR(this->get_logger(), "Save point cloud action failed with code: %d",
-                   static_cast<int>(wrapped_result.code));
+      RCLCPP_ERROR(this->get_logger(), "Failed to save point cloud");
       return false;
     }
   }
 
-  /** Rotate a pose around the x-axis by a specified angle */
   geometry_msgs::msg::Pose rotatePose(const geometry_msgs::msg::Pose& original_pose, double angle_degrees) {
     double angle_radians = angle_degrees * M_PI / 180.0;
     Eigen::Quaterniond original_quat(
@@ -773,10 +785,7 @@ class NextBestViewServer : public rclcpp::Node {
         original_pose.orientation.z
     );
 
-    // Create rotation quaternion for x-axis rotation
     Eigen::Quaterniond rotation_quat(Eigen::AngleAxisd(angle_radians, Eigen::Vector3d::UnitX()));
-
-    // Apply rotation to the original orientation
     Eigen::Quaterniond new_quat = original_quat * rotation_quat;
     new_quat.normalize();
 
@@ -789,19 +798,16 @@ class NextBestViewServer : public rclcpp::Node {
     return rotated_pose;
   }
 
-  /** Handle goal cancellation */
   rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandleNbv> goal_handle) {
     RCLCPP_INFO(this->get_logger(), "Received request to cancel goal");
     (void)goal_handle;
     return rclcpp_action::CancelResponse::ACCEPT;
   }
 
-  /** Handle accepted goal */
   void handle_accepted(const std::shared_ptr<GoalHandleNbv> goal_handle) {
     std::thread{std::bind(&NextBestViewServer::execute, this, std::placeholders::_1), goal_handle}.detach();
   }
 
-  /** Select random poses from a list */
   std::vector<geometry_msgs::msg::Pose> selectRandomPoses(const std::vector<geometry_msgs::msg::Pose>& poses,
                                                           int count) {
     std::vector<geometry_msgs::msg::Pose> selected_poses;
@@ -820,9 +826,22 @@ class NextBestViewServer : public rclcpp::Node {
     }
     return selected_poses;
   }
+
+  /** Move the robot to the "Home" position */
+  bool moveToHome() {
+    move_group_interface_->setNamedTarget("Home");
+    moveit::planning_interface::MoveGroupInterface::Plan home_plan;
+    bool success = (move_group_interface_->plan(home_plan) == moveit::core::MoveItErrorCode::SUCCESS);
+    if (success) {
+      move_group_interface_->execute(home_plan);
+      RCLCPP_INFO(this->get_logger(), "Moved to Home position successfully");
+    } else {
+      RCLCPP_ERROR(this->get_logger(), "Failed to plan or execute move to Home position");
+    }
+    return success;
+  }
 };
 
-/** Main function */
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   auto action_server = std::make_shared<NextBestViewServer>();
