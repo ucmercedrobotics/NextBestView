@@ -28,6 +28,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/FilterPointCloud.action"
   "action/SavePointCloud.action"
   "action/MergePointClouds.action"
+  "action/ClearFiles.action"
   DEPENDENCIES sensor_msgs geometry_msgs std_msgs
 )
 

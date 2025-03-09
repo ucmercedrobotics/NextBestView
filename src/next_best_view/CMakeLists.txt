@@ -74,6 +74,7 @@ add_executable(point_cloud_publisher src/point_cloud_publisher.cpp)
 add_executable(object_detection src/object_detection.cpp)
 add_executable(octomap_generate src/octomap_generate.cpp)
 add_executable(point_cloud_filter src/point_cloud_filter.cpp)
+add_executable(clear_files src/clear_files.cpp)
 
 
 
@@ -119,6 +120,10 @@ target_include_directories(octomap_generate PUBLIC
   $<INSTALL_INTERFACE:include>)
 
 target_include_directories(point_cloud_filter PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+
+target_include_directories(clear_files PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
@@ -308,12 +313,21 @@ target_compile_features(point_cloud_filter PUBLIC c_std_99 cxx_std_17)  # Requir
 ament_target_dependencies(
   point_cloud_filter
   "rclcpp"
+  "rclcpp_action"
   "std_msgs"
   "sensor_msgs"
   "pcl_conversions"
   "pcl_ros"
   "PCL"
   "message_filters"
+  "kinova_action_interfaces"
+)
+
+target_compile_features(clear_files PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+ament_target_dependencies(
+  clear_files
+  "rclcpp"
+  "rclcpp_action"
   "kinova_action_interfaces"
 )
 
@@ -348,6 +362,9 @@ install(TARGETS octomap_generate
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS point_cloud_filter
+  DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS clear_files
   DESTINATION lib/${PROJECT_NAME})
 
 # Install Python modules

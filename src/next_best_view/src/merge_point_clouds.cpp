@@ -9,9 +9,7 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <string>
 #include <vector>
-#include <chrono>
-#include <iomanip>
-#include <sstream>
+#include <regex> // Added for regex matching
 
 // Alias for the filesystem namespace
 namespace fs = std::filesystem;
@@ -24,8 +22,8 @@ using MergePointClouds = kinova_action_interfaces::action::MergePointClouds;
 class PointCloudMergerNode : public rclcpp::Node {
  public:
   PointCloudMergerNode() : Node("pointcloud_merger_node") {
-    // Set the directory containing the individual saved point clouds
-    save_directory_ = "src/next_best_view/point_clouds/";
+    // Set the directory containing the filtered point clouds
+    save_directory_ = "src/next_best_view/filtered_pointclouds/";
 
     // Set the directory where merged point clouds will be saved
     merged_directory_ = "src/next_best_view/merged_pointclouds/";
@@ -57,15 +55,11 @@ class PointCloudMergerNode : public rclcpp::Node {
   }
 
  private:
-  /** Handle incoming goals
-   * @param uuid Unique identifier for the goal
-   * @param goal The goal message containing start_merging
-   * @return ACCEPT_AND_EXECUTE if goal is valid, REJECT otherwise
-   */
+  /** Handle incoming goals */
   rclcpp_action::GoalResponse handle_goal(
       const rclcpp_action::GoalUUID& uuid,
       std::shared_ptr<const MergePointClouds::Goal> goal) {
-    (void)uuid;  // Unused parameter
+    (void)uuid;
     if (!goal->start_merging) {
       RCLCPP_INFO(this->get_logger(), "Received goal with start_merging=false, rejecting");
       return rclcpp_action::GoalResponse::REJECT;
@@ -74,28 +68,20 @@ class PointCloudMergerNode : public rclcpp::Node {
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
-  /** Handle cancellation requests
-   * @param goal_handle Handle to the goal being canceled
-   * @return ACCEPT to allow cancellation
-   */
+  /** Handle cancellation requests */
   rclcpp_action::CancelResponse handle_cancel(
       const std::shared_ptr<rclcpp_action::ServerGoalHandle<MergePointClouds>> goal_handle) {
-    (void)goal_handle;  // Unused for now
+    (void)goal_handle;
     RCLCPP_INFO(this->get_logger(), "Received cancellation request, accepting");
     return rclcpp_action::CancelResponse::ACCEPT;
   }
 
-  /** Handle accepted goals by starting execution in a new thread
-   * @param goal_handle Handle to the accepted goal
-   */
+  /** Handle accepted goals by starting execution in a new thread */
   void handle_accepted(const std::shared_ptr<rclcpp_action::ServerGoalHandle<MergePointClouds>> goal_handle) {
-    // Detach a new thread to execute the goal
     std::thread{std::bind(&PointCloudMergerNode::execute, this, std::placeholders::_1), goal_handle}.detach();
   }
 
-  /** Execute the merging process
-   * @param goal_handle Handle to the current goal
-   */
+  /** Execute the merging process */
   void execute(const std::shared_ptr<rclcpp_action::ServerGoalHandle<MergePointClouds>> goal_handle) {
     RCLCPP_INFO(this->get_logger(), "Executing goal to merge point clouds");
     auto feedback = std::make_shared<MergePointClouds::Feedback>();
@@ -142,7 +128,7 @@ class PointCloudMergerNode : public rclcpp::Node {
       pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
       if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(pcd_file.string(), *cloud) == -1) {
         RCLCPP_ERROR(this->get_logger(), "Failed to load PCD file: %s", pcd_file.string().c_str());
-        continue;  // Skip failed files
+        continue;
       }
 
       *merged_cloud += *cloud;
@@ -158,13 +144,22 @@ class PointCloudMergerNode : public rclcpp::Node {
       return;
     }
 
-    // Generate a unique output filename with a timestamp
-    auto now = std::chrono::system_clock::now();
-    auto now_c = std::chrono::system_clock::to_time_t(now);
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&now_c), "%Y-%m-%d_%H-%M-%S");
-    std::string timestamp = ss.str();
-    std::string output_filename = merged_directory_ + "merged_pointcloud_" + timestamp + ".pcd";
+    // Find the next available tree_<index>.pcd filename
+    int next_index = 0;
+    std::regex pattern(R"(tree_(\d+)\.pcd)");
+    for (const auto& entry : fs::directory_iterator(merged_directory_)) {
+      std::string filename = entry.path().filename().string();
+      std::smatch match;
+      if (std::regex_match(filename, match, pattern)) {
+        int index = std::stoi(match[1].str());
+        if (index >= next_index) {
+          next_index = index + 1;
+        }
+      }
+    }
+
+    // Generate the output filename
+    std::string output_filename = merged_directory_ + "tree_" + std::to_string(next_index) + ".pcd";
 
     // Save the merged point cloud
     if (pcl::io::savePCDFileASCII(output_filename, *merged_cloud) == -1) {
@@ -181,7 +176,7 @@ class PointCloudMergerNode : public rclcpp::Node {
     goal_handle->succeed(result);
   }
 
-  std::string save_directory_;    // Directory with individual point clouds
+  std::string save_directory_;    // Directory with filtered point clouds
   std::string merged_directory_;  // Directory for merged point clouds
   rclcpp_action::Server<MergePointClouds>::SharedPtr action_server_;
 };
