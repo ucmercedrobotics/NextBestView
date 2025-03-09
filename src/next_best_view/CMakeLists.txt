@@ -235,6 +235,7 @@ target_compile_features(canopy_volume PUBLIC c_std_99 cxx_std_17)  # Require C99
 ament_target_dependencies(
   canopy_volume
   "rclcpp"
+  "rclcpp_action"
   "std_msgs"
   "sensor_msgs"
   "pcl_conversions"
@@ -247,6 +248,7 @@ ament_target_dependencies(
   "geometry_msgs"
   "OpenCV"
   "tf2_sensor_msgs"
+  "kinova_action_interfaces"
 
 )
 
