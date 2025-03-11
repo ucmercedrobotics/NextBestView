@@ -11,6 +11,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   sensor_msgs
   geometry_msgs
   std_msgs
+  octomap_msgs
 )
 
 foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
@@ -30,7 +31,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/MergePointClouds.action"
   "action/ClearFiles.action"
   "action/ProcessTreeData.action"
-  DEPENDENCIES sensor_msgs geometry_msgs std_msgs
+  "action/VoxelMap.action"
+  DEPENDENCIES sensor_msgs geometry_msgs std_msgs octomap_msgs
 )
 
 

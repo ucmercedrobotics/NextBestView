@@ -60,6 +60,8 @@ find_package(Eigen3 REQUIRED)
 # Octomap
 find_package(octomap REQUIRED)
 find_package(octomap_msgs REQUIRED)
+find_package(glog REQUIRED)  # Added for glog
+find_package(OpenMP REQUIRED)  # Added for OpenMP
 
 find_package(PCL REQUIRED COMPONENTS common io filters)
 
@@ -67,16 +69,13 @@ add_executable(hello_moveit src/hello_moveit.cpp)
 add_executable(moveto src/moveto.cpp)
 add_executable(nextbestview src/nextbestview.cpp)
 add_executable(point_cloud_saver src/point_cloud_saver.cpp)
-add_executable(create_point_cloud2 src/create_point_cloud2.cpp)
 add_executable(merge_point_clouds src/merge_point_clouds.cpp)
 add_executable(canopy_volume src/canopy_volume.cpp)
-add_executable(point_cloud_publisher src/point_cloud_publisher.cpp)
 add_executable(object_detection src/object_detection.cpp)
 add_executable(octomap_generate src/octomap_generate.cpp)
 add_executable(point_cloud_filter src/point_cloud_filter.cpp)
 add_executable(clear_files src/clear_files.cpp)
-
-
+add_executable(voxel_map src/voxel_map.cpp)
 
 
 target_include_directories(hello_moveit PUBLIC
@@ -95,19 +94,11 @@ target_include_directories(point_cloud_saver PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
-target_include_directories(create_point_cloud2 PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-
 target_include_directories(merge_point_clouds PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
 target_include_directories(canopy_volume PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-
-target_include_directories(point_cloud_publisher PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
@@ -126,6 +117,13 @@ target_include_directories(point_cloud_filter PUBLIC
 target_include_directories(clear_files PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
+
+target_include_directories(voxel_map PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  ${OCTOMAP_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIR})
 
 target_compile_features(hello_moveit PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
@@ -190,24 +188,6 @@ ament_target_dependencies(
 
 )
 
-target_compile_features(create_point_cloud2 PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
-ament_target_dependencies(
-  create_point_cloud2
-  "rclcpp"
-  "std_msgs"
-  "sensor_msgs"
-  "pcl_conversions"
-  "pcl_ros"
-  "PCL"
-  "message_filters"
-  "cv_bridge"
-  "tf2"
-  "tf2_ros"
-  "geometry_msgs"
-  "OpenCV"
-  "tf2_sensor_msgs"
-
-)
 
 target_compile_features(merge_point_clouds PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(
@@ -249,25 +229,6 @@ ament_target_dependencies(
   "OpenCV"
   "tf2_sensor_msgs"
   "kinova_action_interfaces"
-
-)
-
-target_compile_features(point_cloud_publisher PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
-ament_target_dependencies(
-  point_cloud_publisher
-  "rclcpp"
-  "std_msgs"
-  "sensor_msgs"
-  "pcl_conversions"
-  "pcl_ros"
-  "PCL"
-  "message_filters"
-  "cv_bridge"
-  "tf2"
-  "tf2_ros"
-  "geometry_msgs"
-  "OpenCV"
-  "tf2_sensor_msgs"
 
 )
 
@@ -333,6 +294,25 @@ ament_target_dependencies(
   "kinova_action_interfaces"
 )
 
+target_compile_features(voxel_map PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+ament_target_dependencies(
+  voxel_map
+  "rclcpp"
+  "rclcpp_action"
+  "sensor_msgs"
+  "geometry_msgs"
+  "octomap_msgs"
+  "pcl_conversions"
+  "tf2_eigen"
+  "kinova_action_interfaces"
+)
+
+target_link_libraries(voxel_map
+  ${OCTOMAP_LIBRARIES}
+  ${PCL_LIBRARIES}
+  glog::glog
+  OpenMP::OpenMP_CXX)
+
 install(TARGETS hello_moveit
   DESTINATION lib/${PROJECT_NAME})
 
@@ -345,16 +325,10 @@ install(TARGETS nextbestview
 install(TARGETS point_cloud_saver
   DESTINATION lib/${PROJECT_NAME})
 
-install(TARGETS create_point_cloud2
-  DESTINATION lib/${PROJECT_NAME})
-
 install(TARGETS merge_point_clouds
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS canopy_volume
-  DESTINATION lib/${PROJECT_NAME})
-
-install(TARGETS point_cloud_publisher
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS object_detection
@@ -367,6 +341,9 @@ install(TARGETS point_cloud_filter
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS clear_files
+  DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS voxel_map
   DESTINATION lib/${PROJECT_NAME})
 
 # Install Python modules
