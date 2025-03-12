@@ -9,18 +9,18 @@ def generate_launch_description():
     # Get the package share directory for next_best_view
     package_share_directory = get_package_share_directory('next_best_view')
     # Path to the YAML parameter file
-    params_file = os.path.join(package_share_directory, 'config', 'voxel_map_params.yaml')
+    params_file = os.path.join(package_share_directory, 'config', 'pose_generator_params.yaml')
 
 
-    # point_cloud_saver Action
-    voxel_map = Node(
+    # pose_generator Service
+    pose_generator = Node(
         name="voxel_map",
         package="next_best_view",
-        executable="voxel_map",
+        executable="pose_generator",
         output="screen",
         parameters=[
             params_file  # Load the YAML parameters file
         ],
     )
 
-    return LaunchDescription([voxel_map])
+    return LaunchDescription([pose_generator])

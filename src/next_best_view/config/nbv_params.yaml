@@ -1,7 +1,0 @@
-ros__parameters:
-  voxel_resolution: 0.03
-  ray_trace_step: 0.005
-  surrounding_voxels_radius: 2
-  camera_focal_length_factor: 1.0
-  camera_intrinsic: [1297.672904, 0.0, 620.914026, 0.0, 1298.631344, 238.280325, 0.0, 0.0, 1.0]
-  max_gmm_cluster_num: 40

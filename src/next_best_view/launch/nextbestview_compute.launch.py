@@ -9,7 +9,7 @@ def generate_launch_description():
     # Get the package share directory for next_best_view
     package_share_directory = get_package_share_directory('next_best_view')
     # Path to the YAML parameter file
-    params_file = os.path.join(package_share_directory, 'config', 'nbv_params.yaml')
+    params_file = os.path.join(package_share_directory, 'config', 'nextbestview_compute_params.yaml')
 
 
     # point_cloud_saver Action
