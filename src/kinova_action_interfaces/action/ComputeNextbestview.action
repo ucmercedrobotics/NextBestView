@@ -1,0 +1,19 @@
+# ComputeNextbestview.action
+
+# Goal: Inputs provided by the client
+geometry_msgs/Pose camera_pose           # Current camera position and orientation
+octomap_msgs/Octomap voxel_map          # Voxel map (included for completeness, though not directly used)
+geometry_msgs/Point[] frontier_voxels   # List of frontier voxel coordinates
+geometry_msgs/Point[] occupied_voxels   # List of occupied voxel coordinates
+geometry_msgs/Point bbx_unknown_min     # Minimum point of the bounding box
+geometry_msgs/Point bbx_unknown_max     # Maximum point of the bounding box
+geometry_msgs/Pose[] candidate_poses    # List of candidate poses to evaluate
+
+---
+
+# Result: Output returned to the client
+geometry_msgs/Pose nbv_pose             # The computed Next Best View pose
+
+---
+
+# Feedback: Not required for this task, left empty

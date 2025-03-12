@@ -5,26 +5,12 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# CMake Warning (dev) at CMakeLists.txt:31 (find_package):
-#   Policy CMP0074 is not set: find_package uses <PackageName>_ROOT variables.
-#   Run "cmake --help-policy CMP0074" for policy details.  Use the cmake_policy
-#   command to set the policy and suppress this warning.
-
-#   CMake variable PCL_ROOT is set to:
-
-#     /usr
-
-#   For compatibility, CMake is ignoring the variable.
-# This warning is for project developers.  Use -Wno-dev to suppress it.
-
-
 # Set CMake policy CMP0074 to NEW to suppress the warning
 if(POLICY CMP0074)
   cmake_policy(SET CMP0074 NEW)
 endif()
 
-
-# find dependencies
+# Find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -62,9 +48,11 @@ find_package(octomap REQUIRED)
 find_package(octomap_msgs REQUIRED)
 find_package(glog REQUIRED)  # Added for glog
 find_package(OpenMP REQUIRED)  # Added for OpenMP
+find_package(CGAL REQUIRED)  # Added for CGAL
 
 find_package(PCL REQUIRED COMPONENTS common io filters)
 
+# Add executables
 add_executable(hello_moveit src/hello_moveit.cpp)
 add_executable(moveto src/moveto.cpp)
 add_executable(nextbestview src/nextbestview.cpp)
@@ -76,8 +64,9 @@ add_executable(octomap_generate src/octomap_generate.cpp)
 add_executable(point_cloud_filter src/point_cloud_filter.cpp)
 add_executable(clear_files src/clear_files.cpp)
 add_executable(voxel_map src/voxel_map.cpp)
+add_executable(nextbestview_compute src/nextbestview_compute.cpp)
 
-
+# Set include directories for each target
 target_include_directories(hello_moveit PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -105,7 +94,7 @@ target_include_directories(canopy_volume PUBLIC
 target_include_directories(object_detection PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-  
+
 target_include_directories(octomap_generate PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -125,7 +114,17 @@ target_include_directories(voxel_map PUBLIC
   ${PCL_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR})
 
-target_compile_features(hello_moveit PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_include_directories(nextbestview_compute PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+  ${OCTOMAP_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIR}
+  ${OpenCV_INCLUDE_DIRS}
+  ${CGAL_INCLUDE_DIRS})
+
+# Set compile features and dependencies for each target
+target_compile_features(hello_moveit PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(
   hello_moveit
   "moveit_ros_planning_interface"
@@ -134,7 +133,7 @@ ament_target_dependencies(
   "std_msgs"
 )
 
-target_compile_features(moveto PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(moveto PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(
   moveto
   "moveit_ros_planning_interface"
@@ -143,10 +142,9 @@ ament_target_dependencies(
   "geometry_msgs"
   "std_msgs"
   "kinova_action_interfaces"
-
 )
 
-target_compile_features(nextbestview PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(nextbestview PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(
   nextbestview
   "moveit_ros_planning_interface"
@@ -165,11 +163,9 @@ ament_target_dependencies(
   "pcl_ros"
   "PCL"
   "sensor_msgs"
-
-
 )
 
-target_compile_features(point_cloud_saver PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(point_cloud_saver PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(
   point_cloud_saver
   "rclcpp"
@@ -184,12 +180,9 @@ ament_target_dependencies(
   "tf2_ros"
   "rcpputils"
   "kinova_action_interfaces"
-
-
 )
 
-
-target_compile_features(merge_point_clouds PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(merge_point_clouds PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(
   merge_point_clouds
   "rclcpp"
@@ -207,11 +200,9 @@ ament_target_dependencies(
   "OpenCV"
   "tf2_sensor_msgs"
   "kinova_action_interfaces"
-
-
 )
 
-target_compile_features(canopy_volume PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(canopy_volume PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(
   canopy_volume
   "rclcpp"
@@ -229,10 +220,9 @@ ament_target_dependencies(
   "OpenCV"
   "tf2_sensor_msgs"
   "kinova_action_interfaces"
-
 )
 
-target_compile_features(object_detection PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(object_detection PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(
   object_detection
   "rclcpp"
@@ -245,7 +235,6 @@ ament_target_dependencies(
   "cv_bridge"
   "tf2"
   "tf2_ros"
-  "tf2_ros"
   "tf2_geometry_msgs"
   "OpenCV"
   "Eigen3"
@@ -253,7 +242,7 @@ ament_target_dependencies(
 )
 include_directories(${EIGEN3_INCLUDE_DIR})
 
-target_compile_features(octomap_generate PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(octomap_generate PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(
   octomap_generate
   "rclcpp"
@@ -272,7 +261,7 @@ ament_target_dependencies(
   "octomap_msgs"
 )
 
-target_compile_features(point_cloud_filter PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(point_cloud_filter PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(
   point_cloud_filter
   "rclcpp"
@@ -286,7 +275,7 @@ ament_target_dependencies(
   "kinova_action_interfaces"
 )
 
-target_compile_features(clear_files PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(clear_files PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(
   clear_files
   "rclcpp"
@@ -294,7 +283,7 @@ ament_target_dependencies(
   "kinova_action_interfaces"
 )
 
-target_compile_features(voxel_map PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_compile_features(voxel_map PUBLIC c_std_99 cxx_std_17)
 ament_target_dependencies(
   voxel_map
   "rclcpp"
@@ -307,12 +296,35 @@ ament_target_dependencies(
   "kinova_action_interfaces"
 )
 
+target_compile_features(nextbestview_compute PUBLIC c_std_99 cxx_std_17)
+ament_target_dependencies(
+  nextbestview_compute
+  "rclcpp"
+  "rclcpp_action"
+  "geometry_msgs"
+  "octomap_msgs"
+  "tf2_eigen"
+  "kinova_action_interfaces"
+  "OpenCV"
+  "CGAL"
+)
+
+# Link libraries for specific targets
 target_link_libraries(voxel_map
   ${OCTOMAP_LIBRARIES}
   ${PCL_LIBRARIES}
   glog::glog
   OpenMP::OpenMP_CXX)
 
+target_link_libraries(nextbestview_compute
+  ${OCTOMAP_LIBRARIES}
+  ${PCL_LIBRARIES}
+  glog::glog
+  OpenMP::OpenMP_CXX
+  ${OpenCV_LIBRARIES}
+  ${CGAL_LIBRARIES})
+
+# Install targets
 install(TARGETS hello_moveit
   DESTINATION lib/${PROJECT_NAME})
 
@@ -346,16 +358,19 @@ install(TARGETS clear_files
 install(TARGETS voxel_map
   DESTINATION lib/${PROJECT_NAME})
 
+install(TARGETS nextbestview_compute
+  DESTINATION lib/${PROJECT_NAME})
+
 # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
-# Install Python executables in the ros2_ws/install/cpp_py_pkg/lib/cpp_py_pkg/ folder
+# Install Python executables
 install(PROGRAMS
-scripts/object_detection.py
-DESTINATION lib/${PROJECT_NAME}
+  scripts/object_detection.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
-# Install launch files.
+# Install launch files
 install(DIRECTORY
   launch
   config

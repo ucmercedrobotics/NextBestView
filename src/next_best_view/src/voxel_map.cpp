@@ -21,12 +21,10 @@
 #include <thread>
 #include <cfloat>
 
-// Action interface (assumed to be defined in kinova_action_interfaces/action/VoxelMap.action)
 #include <kinova_action_interfaces/action/voxel_map.hpp>
 
-// Global voxel maps
+// Global voxel map
 octomap::ColorOcTree _voxel_map(1.0);
-octomap::ColorOcTree _bbx_voxel_map(1.0);
 
 class VoxelStruct : public rclcpp::Node {
 private:
@@ -35,8 +33,6 @@ private:
 
     // Voxel map parameters
     double voxel_resolution_;
-    Eigen::Vector3d bbx_unknown_min_;
-    Eigen::Vector3d bbx_unknown_max_;
     double ray_trace_step_;
     int surrounding_voxels_radius_;
 
@@ -46,26 +42,20 @@ private:
 
 public:
     VoxelStruct(const rclcpp::NodeOptions& options) : Node("voxel_struct", options) {
-        // Declare parameters with default values
         this->declare_parameter("voxel_resolution", 1.0);
         this->declare_parameter("ray_trace_step", 0.1);
         this->declare_parameter("surrounding_voxels_radius", 1);
         this->declare_parameter("camera_focal_length_factor", 1.0);
         this->declare_parameter("camera_intrinsic", std::vector<double>{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0});
 
-        // Initialize the node with parameters
         initialize();
     }
 
     void initialize() {
-        // Load voxel parameters
         voxel_resolution_ = this->get_parameter("voxel_resolution").as_double();
         _voxel_map.setResolution(voxel_resolution_);
-        _bbx_voxel_map.setResolution(voxel_resolution_);
         _voxel_map.clear();
-        _bbx_voxel_map.clear();
 
-        // Load camera intrinsic parameters
         std::vector<double> camera_intrinsic_vec = this->get_parameter("camera_intrinsic").as_double_array();
         if (camera_intrinsic_vec.size() != 9) {
             LOG(ERROR) << "Invalid camera intrinsic matrix size";
@@ -88,113 +78,51 @@ public:
 
     ~VoxelStruct() = default;
 
-    // Core function to update the voxel map
     octomap::ColorOcTree update_voxel_map(
         const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
         const Eigen::Matrix4d &camera_pose,
+        const Eigen::Vector3d &bbx_unknown_min,
+        const Eigen::Vector3d &bbx_unknown_max,
         std::vector<Eigen::Vector3d> &output_frontier_voxels,
-        std::vector<Eigen::Vector3d> &output_occupied_voxels,
-        Eigen::Vector3d &bbx_unknown_min,
-        Eigen::Vector3d &bbx_unknown_max) {
+        std::vector<Eigen::Vector3d> &output_occupied_voxels) {
+        
         output_frontier_voxels.clear();
         output_occupied_voxels.clear();
         std::vector<Eigen::Vector3d> frontier_voxels;
         octomap::ColorOcTree voxel_map(voxel_resolution_);
-
-        bool is_first = (occupied_voxels_.size() == 0);
 
         if (cloud->size() == 0) {
             LOG(WARNING) << "Input point cloud is empty";
             return voxel_map;
         }
 
-        // 1. Update voxel_map and _bbx_voxel_map with past occupied voxels
+        // Set static bounding box from provided values
+        voxel_map.setBBXMin(to_oct3d(bbx_unknown_min));
+        voxel_map.setBBXMax(to_oct3d(bbx_unknown_max));
+
+        // Add past occupied voxels within the bounding box
         for (const auto& voxel : occupied_voxels_) {
-            octomap::point3d point(voxel[0], voxel[1], voxel[2]);
-            voxel_map.updateNode(point, true);
-            voxel_map.search(point)->setColor(0, 0, 255);
+            if (is_within_bounds(voxel, bbx_unknown_min, bbx_unknown_max)) {
+                octomap::point3d point(voxel[0], voxel[1], voxel[2]);
+                voxel_map.updateNode(point, true);
+                voxel_map.search(point)->setColor(0, 0, 255);
+            }
         }
         LOG(INFO) << "Past occupied nodes added, leaf nodes: " << voxel_map.getNumLeafNodes();
 
-        // Add current frame's occupied voxels
+        // Add current frame's occupied voxels within the bounding box
         for (const auto& point : cloud->points) {
-            octomap::point3d pt(point.x, point.y, point.z);
-            _bbx_voxel_map.updateNode(pt, true);
-            _bbx_voxel_map.search(pt)->setColor(0, 0, 255);
-            voxel_map.updateNode(pt, true);
-            voxel_map.search(pt)->setColor(0, 0, 255);
+            Eigen::Vector3d pt_vec(point.x, point.y, point.z);
+            if (is_within_bounds(pt_vec, bbx_unknown_min, bbx_unknown_max)) {
+                octomap::point3d pt(point.x, point.y, point.z);
+                voxel_map.updateNode(pt, true);
+                voxel_map.search(pt)->setColor(0, 0, 255);
+                occupied_voxels_.push_back(pt_vec); // Accumulate within bounds
+            }
         }
         LOG(INFO) << "Current frame nodes added, leaf nodes: " << voxel_map.getNumLeafNodes();
 
-        // 2. Initialize or expand bounding box for first frame
-        if (is_first) {
-            voxel_map.getMetricMin(bbx_unknown_min_[0], bbx_unknown_min_[1], bbx_unknown_min_[2]);
-            voxel_map.getMetricMax(bbx_unknown_max_[0], bbx_unknown_max_[1], bbx_unknown_max_[2]);
-            Eigen::Vector3d z_axis = camera_pose.block<3,1>(0,2);
-            Eigen::Vector3d bbx_length = (bbx_unknown_max_ - bbx_unknown_min_) * 0.5;
-            if (z_axis[0] > 0) bbx_unknown_max_[0] += bbx_length[0]; else bbx_unknown_min_[0] -= bbx_length[0];
-            if (z_axis[1] > 0) bbx_unknown_max_[1] += bbx_length[1]; else bbx_unknown_min_[1] -= bbx_length[1];
-            if (z_axis[2] > 0) bbx_unknown_max_[2] += bbx_length[2]; else bbx_unknown_min_[2] -= bbx_length[2];
-        }
-
-        // 3. Reset voxel_map boundaries
-        _bbx_voxel_map.getMetricMax(bbx_unknown_max_[0], bbx_unknown_max_[1], bbx_unknown_max_[2]);
-        _bbx_voxel_map.getMetricMin(bbx_unknown_min_[0], bbx_unknown_min_[1], bbx_unknown_min_[2]);
-        voxel_map.setBBXMin(to_oct3d(bbx_unknown_min_));
-        voxel_map.setBBXMax(to_oct3d(bbx_unknown_max_));
-        for (double x = bbx_unknown_min_[0]; x < bbx_unknown_max_[0]; x += voxel_resolution_) {
-            for (double y = bbx_unknown_min_[1]; y < bbx_unknown_max_[1]; y += voxel_resolution_) {
-                for (double z = bbx_unknown_min_[2]; z < bbx_unknown_max_[2]; z += voxel_resolution_) {
-                    octomap::point3d start(x, y, z);
-                    octomap::point3d end(x + voxel_resolution_, y + voxel_resolution_, z + voxel_resolution_);
-                    voxel_map.insertRay(start, end);
-                    if (is_first) _voxel_map.insertRay(start, end);
-                }
-            }
-        }
-
-        // Reset voxel types
-        occupied_voxels_.resize(voxel_map.getNumLeafNodes());
-        #pragma omp parallel for
-        for (size_t i = 0; i < voxel_map.getNumLeafNodes(); ++i) {
-            octomap::ColorOcTree::leaf_iterator it = voxel_map.begin_leafs();
-            std::advance(it, i);
-            auto color = it->getColor();
-            if (color.r == 0 && color.g == 0 && color.b == 255) {
-                occupied_voxels_[i] = Eigen::Vector3d(it.getX(), it.getY(), it.getZ());
-            } else {
-                it->setColor(0, 0, 0);
-                occupied_voxels_[i] = Eigen::Vector3d(0, 0, 0);
-            }
-        }
-        voxel_map.updateInnerOccupancy();
-        occupied_voxels_.erase(std::remove(occupied_voxels_.begin(), occupied_voxels_.end(), Eigen::Vector3d(0, 0, 0)), occupied_voxels_.end());
-        LOG(INFO) << "Voxel map boundaries reset, leaf nodes: " << voxel_map.getNumLeafNodes();
-
-        // Reset _voxel_map colors for first frame
-        if (is_first) {
-            #pragma omp parallel for
-            for (size_t i = 0; i < _voxel_map.getNumLeafNodes(); ++i) {
-                octomap::ColorOcTree::leaf_iterator it = _voxel_map.begin_leafs();
-                std::advance(it, i);
-                it->setColor(0, 0, 0);
-            }
-            _voxel_map.updateInnerOccupancy();
-        }
-
-        // Copy previous _voxel_map colors to voxel_map
-        if (!is_first) {
-            for (auto it = _voxel_map.begin_leafs(), end = _voxel_map.end_leafs(); it != end; ++it) {
-                auto voxel_map_it = voxel_map.search(it.getX(), it.getY(), it.getZ());
-                if (!voxel_map_it || voxel_map_it->getColor() == octomap::ColorOcTreeNode::Color(0, 0, 255)) continue;
-                auto color = it->getColor();
-                voxel_map.updateNode(it.getX(), it.getY(), it.getZ(), true);
-                voxel_map.search(it.getX(), it.getY(), it.getZ())->setColor(color.r, color.g, color.b);
-            }
-        }
-        LOG(INFO) << "Previous voxels added, leaf nodes: " << voxel_map.getNumLeafNodes();
-
-        // 4. Ray tracing to classify voxels
+        // Ray tracing to classify voxels
         Eigen::Vector3d p1 = camera_pose.block<3,3>(0,0) * frustum_points_[0] + camera_pose.block<3,1>(0,3);
         Eigen::Vector3d p2 = camera_pose.block<3,3>(0,0) * frustum_points_[1] + camera_pose.block<3,1>(0,3);
         Eigen::Vector3d p3 = camera_pose.block<3,3>(0,0) * frustum_points_[2] + camera_pose.block<3,1>(0,3);
@@ -219,7 +147,7 @@ public:
             Eigen::Vector3d ray_origin = camera_pose.block<3,1>(0,3);
             Eigen::Vector3d ray_direction = (ray_visual_end - ray_origin).normalized();
             Eigen::Vector3d box_intersection;
-            if (computeRayBoxIntersection(ray_origin, ray_direction, bbx_unknown_min_, bbx_unknown_max_, box_intersection)) {
+            if (computeRayBoxIntersection(ray_origin, ray_direction, bbx_unknown_min, bbx_unknown_max, box_intersection)) {
                 ray_origin = box_intersection;
                 Eigen::Vector3d ray_end = ray_origin + ray_trace_length * ray_direction;
                 ray_orign_vec[k] = new octomap::point3d(ray_origin[0], ray_origin[1], ray_origin[2]);
@@ -268,7 +196,7 @@ public:
                     auto _voxel_map_it = _voxel_map.search(voxel[0], voxel[1], voxel[2]);
                     if (_voxel_map_it) {
                         auto _color = _voxel_map_it->getColor();
-                        if ((_color.r == 255 && _color.g == 255 && _color.b == 255) || (_color.r == 0 && _color.g == 0 && _color.b == 255)){
+                        if ((_color.r == 255 && _color.g == 255 && _color.b == 255) || (_color.r == 0 && _color.g == 0 && _color.b == 255)) {
                             voxel_map_it->setColor(_color.r, _color.g, _color.b);
                         } else {
                             voxel_map_it->setColor(188, 188, 188);
@@ -303,7 +231,7 @@ public:
         }
         LOG(INFO) << "Voxel classification completed, leaf nodes: " << voxel_map.getNumLeafNodes();
 
-        // 5. Update global maps
+        // Update global map
         for (auto it = voxel_map.begin_leafs(), end = voxel_map.end_leafs(); it != end; ++it) {
             auto color = it->getColor();
             _voxel_map.updateNode(it.getX(), it.getY(), it.getZ(), true);
@@ -311,35 +239,8 @@ public:
         }
         _voxel_map.updateInnerOccupancy();
 
-        _bbx_voxel_map.clear();
-        for (const auto& frontier : frontier_voxels) {
-            auto surrounding = getSurroundingVoxels(frontier, surrounding_voxels_radius_);
-            for (const auto& voxel : surrounding) {
-                octomap::point3d pt(voxel[0], voxel[1], voxel[2]);
-                _bbx_voxel_map.updateNode(pt, true);
-                _bbx_voxel_map.search(pt)->setColor(255, 0, 0);
-            }
-        }
-        for (const auto& voxel : occupied_voxels_) {
-            octomap::point3d pt(voxel[0], voxel[1], voxel[2]);
-            _bbx_voxel_map.updateNode(pt, true);
-            _bbx_voxel_map.search(pt)->setColor(0, 0, 255);
-        }
-        _bbx_voxel_map.updateInnerOccupancy();
-
-        _bbx_voxel_map.getMetricMin(bbx_unknown_min_[0], bbx_unknown_min_[1], bbx_unknown_min_[2]);
-        _bbx_voxel_map.getMetricMax(bbx_unknown_max_[0], bbx_unknown_max_[1], bbx_unknown_max_[2]);
-        clearOutsideBBX(voxel_map, to_oct3d(bbx_unknown_min_), to_oct3d(bbx_unknown_max_));
-        voxel_map.setBBXMin(to_oct3d(bbx_unknown_min_));
-        voxel_map.setBBXMax(to_oct3d(bbx_unknown_max_));
-        voxel_map.updateInnerOccupancy();
-
-        LOG(INFO) << "Bounding box expanded, leaf nodes: " << voxel_map.getNumLeafNodes();
-
         output_frontier_voxels = frontier_voxels;
         output_occupied_voxels = occupied_voxels_;
-        bbx_unknown_min = bbx_unknown_min_;
-        bbx_unknown_max = bbx_unknown_max_;
 
         return voxel_map;
     }
@@ -375,6 +276,12 @@ private:
         return true;
     }
 
+    bool is_within_bounds(const Eigen::Vector3d& point, const Eigen::Vector3d& min, const Eigen::Vector3d& max) {
+        return (point[0] >= min[0] && point[0] <= max[0] &&
+                point[1] >= min[1] && point[1] <= max[1] &&
+                point[2] >= min[2] && point[2] <= max[2]);
+    }
+
     std::vector<Eigen::Vector3d> find_neighbors(double x, double y, double z) {
         std::vector<Eigen::Vector3d> neighbors;
         double step = voxel_resolution_;
@@ -408,17 +315,6 @@ private:
             }
         }
         return surrounding_voxels;
-    }
-
-    void clearOutsideBBX(octomap::ColorOcTree& map, const octomap::point3d& min, const octomap::point3d& max) {
-        for (auto it = map.begin_leafs(), end = map.end_leafs(); it != end; ++it) {
-            if (it.getX() < min.x() || it.getX() > max.x() ||
-                it.getY() < min.y() || it.getY() > max.y() ||
-                it.getZ() < min.z() || it.getZ() > max.z()) {
-                map.deleteNode(it.getKey());
-            }
-        }
-        map.updateInnerOccupancy();
     }
 
     void analyzeCameraIntrinsic(
@@ -486,13 +382,16 @@ private:
         tf2::fromMsg(goal->camera_pose, affine);
         Eigen::Matrix4d camera_pose = affine.matrix();
 
+        // Extract bounding box from goal
+        Eigen::Vector3d bbx_min(goal->bbx_unknown_min.x, goal->bbx_unknown_min.y, goal->bbx_unknown_min.z);
+        Eigen::Vector3d bbx_max(goal->bbx_unknown_max.x, goal->bbx_unknown_max.y, goal->bbx_unknown_max.z);
+
         // Execute the voxel map update
         std::vector<Eigen::Vector3d> frontier_voxels, occupied_voxels;
-        Eigen::Vector3d bbx_min, bbx_max;
         octomap::ColorOcTree voxel_map = voxel_struct_->update_voxel_map(
-            cloud, camera_pose, frontier_voxels, occupied_voxels, bbx_min, bbx_max);
+            cloud, camera_pose, bbx_min, bbx_max, frontier_voxels, occupied_voxels);
 
-        // Prepare result
+        // Prepare result without bounding box information
         auto result = std::make_shared<kinova_action_interfaces::action::VoxelMap::Result>();
         octomap_msgs::fullMapToMsg(voxel_map, result->octomap);
         for (const auto& v : frontier_voxels) {
@@ -505,12 +404,6 @@ private:
             p.x = v.x(); p.y = v.y(); p.z = v.z();
             result->occupied_voxels.push_back(p);
         }
-        result->bbx_unknown_min.x = bbx_min.x();
-        result->bbx_unknown_min.y = bbx_min.y();
-        result->bbx_unknown_min.z = bbx_min.z();
-        result->bbx_unknown_max.x = bbx_max.x();
-        result->bbx_unknown_max.y = bbx_max.y();
-        result->bbx_unknown_max.z = bbx_max.z();
 
         goal_handle->succeed(result);
         RCLCPP_INFO(this->get_logger(), "Action completed successfully");

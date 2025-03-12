@@ -32,6 +32,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/ClearFiles.action"
   "action/ProcessTreeData.action"
   "action/VoxelMap.action"
+  "action/ComputeNextbestview.action"
   DEPENDENCIES sensor_msgs geometry_msgs std_msgs octomap_msgs
 )
 

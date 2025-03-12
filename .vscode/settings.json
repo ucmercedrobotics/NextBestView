@@ -96,6 +96,8 @@
       "typeindex": "cpp",
       "typeinfo": "cpp",
       "variant": "cpp",
-      "hash_map": "cpp"
+      "hash_map": "cpp",
+      "core": "cpp",
+      "numericaldiff": "cpp"
     },
   }

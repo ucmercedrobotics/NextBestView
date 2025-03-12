@@ -1,12 +1,17 @@
 # Goal
 sensor_msgs/PointCloud2 cloud
 geometry_msgs/Pose camera_pose
+geometry_msgs/Point bbx_unknown_min
+geometry_msgs/Point bbx_unknown_max
+
 ---
+
 # Result
 octomap_msgs/Octomap octomap
 geometry_msgs/Point[] frontier_voxels
 geometry_msgs/Point[] occupied_voxels
-geometry_msgs/Point bbx_unknown_min
-geometry_msgs/Point bbx_unknown_max
+
 ---
-# Feedback (optional, left empty here)
+
+# Feedback
+# (Optional, not used here)
