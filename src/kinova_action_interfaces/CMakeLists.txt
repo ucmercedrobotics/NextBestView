@@ -34,6 +34,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/VoxelMap.action"
   "action/ComputeNextbestview.action"
   "srv/PoseGenerator.srv"
+  "srv/ReachabilityCheck.srv"
   DEPENDENCIES sensor_msgs geometry_msgs std_msgs octomap_msgs
 )
 

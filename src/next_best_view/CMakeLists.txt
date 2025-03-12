@@ -66,6 +66,8 @@ add_executable(clear_files src/clear_files.cpp)
 add_executable(voxel_map src/voxel_map.cpp)
 add_executable(nextbestview_compute src/nextbestview_compute.cpp)
 add_executable(pose_generator src/pose_generator.cpp)  # New service node
+add_executable(reachability_check src/reachability_check.cpp)  # New service node
+
 
 # Set include directories for each target
 target_include_directories(hello_moveit PUBLIC
@@ -125,6 +127,10 @@ target_include_directories(nextbestview_compute PUBLIC
   ${CGAL_INCLUDE_DIRS})
 
 target_include_directories(pose_generator PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)  # Include dirs for new service node
+
+target_include_directories(reachability_check PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)  # Include dirs for new service node
 
@@ -322,6 +328,18 @@ ament_target_dependencies(
   "kinova_action_interfaces"
 )
 
+target_compile_features(reachability_check PUBLIC c_std_99 cxx_std_17)  # New for service node
+ament_target_dependencies(
+  reachability_check
+  "rclcpp"
+  "kinova_action_interfaces"
+  "geometry_msgs"
+  "tf2_ros"
+  "tf2_geometry_msgs"
+  "moveit_ros_planning_interface"
+)
+
+
 # Link libraries for specific targets
 target_link_libraries(voxel_map
   ${OCTOMAP_LIBRARIES}
@@ -377,7 +395,10 @@ install(TARGETS nextbestview_compute
 install(TARGETS pose_generator
   DESTINATION lib/${PROJECT_NAME})  # New install for service node
 
-# Install Python modules
+install(TARGETS reachability_check
+  DESTINATION lib/${PROJECT_NAME})  # New install for service node  
+
+  # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
 # Install Python executables

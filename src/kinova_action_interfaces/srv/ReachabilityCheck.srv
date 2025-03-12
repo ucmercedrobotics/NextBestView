@@ -1,0 +1,8 @@
+# nbv_service/srv/CheckReachablePoses.srv
+
+# Request
+geometry_msgs/Pose[] camera_poses
+
+---
+# Response
+geometry_msgs/Pose[] reachable_camera_poses
