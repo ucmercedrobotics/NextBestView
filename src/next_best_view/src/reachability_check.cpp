@@ -76,7 +76,9 @@ void ReachablePosesService::handle_request(const std::shared_ptr<kinova_action_i
 
         // Check IK solution
         if (robot_state->setFromIK(jmg, end_effector_pose, end_effector_link, 1.0)) {
+            // Add both camera pose and end-effector pose to the response
             response->reachable_camera_poses.push_back(camera_pose);
+            response->corresponding_end_effector_poses.push_back(end_effector_pose);
             RCLCPP_DEBUG(this->get_logger(), "Pose at (%.2f, %.2f, %.2f) is reachable",
                          camera_pose.position.x, camera_pose.position.y, camera_pose.position.z);
         } else {
