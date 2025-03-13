@@ -1,0 +1,6 @@
+# Request
+geometry_msgs/Point object_position
+string shape_type
+---
+# Response
+bool success

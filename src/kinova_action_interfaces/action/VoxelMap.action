@@ -1,5 +1,4 @@
 # Goal
-sensor_msgs/PointCloud2 cloud
 geometry_msgs/Pose camera_pose
 geometry_msgs/Point bbx_unknown_min
 geometry_msgs/Point bbx_unknown_max
@@ -14,4 +13,4 @@ geometry_msgs/Point[] occupied_voxels
 ---
 
 # Feedback
-# (Optional, not used here)
+# (No feedback for now)

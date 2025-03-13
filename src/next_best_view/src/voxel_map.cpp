@@ -20,6 +20,10 @@
 #include <memory>
 #include <thread>
 #include <cfloat>
+// Added includes for thread safety and futures
+#include <queue>
+#include <mutex>
+#include <future>
 
 #include <kinova_action_interfaces/action/voxel_map.hpp>
 
@@ -350,12 +354,23 @@ public:
             std::bind(&VoxelMapActionServer::handle_goal, this, _1, _2),
             std::bind(&VoxelMapActionServer::handle_cancel, this, _1),
             std::bind(&VoxelMapActionServer::handle_accepted, this, _1));
+        
+        // Set up subscription with QoS: KeepLast(1) and best_effort
+        auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).best_effort();
+        point_cloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+            "/camera/depth/color/points", qos,
+            std::bind(&VoxelMapActionServer::point_cloud_callback, this, _1));
+        
         RCLCPP_INFO(this->get_logger(), "VoxelMapActionServer initialized");
     }
 
 private:
     std::shared_ptr<VoxelStruct> voxel_struct_;
     rclcpp_action::Server<kinova_action_interfaces::action::VoxelMap>::SharedPtr action_server_;
+    // Added members for subscription and point cloud handling
+    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_sub_;
+    std::queue<std::promise<std::shared_ptr<pcl::PointCloud<pcl::PointXYZ>>>> promise_queue_;
+    std::mutex promise_mutex_;
 
     rclcpp_action::GoalResponse handle_goal(
         const rclcpp_action::GoalUUID& /*uuid*/,
@@ -372,12 +387,34 @@ private:
         std::thread(&VoxelMapActionServer::execute, this, goal_handle).detach();
     }
 
+    void point_cloud_callback(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+        auto cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+        pcl::fromROSMsg(*msg, *cloud);
+        {
+            std::lock_guard<std::mutex> lock(promise_mutex_);
+            if (!promise_queue_.empty()) {
+                auto& promise = promise_queue_.front();
+                promise.set_value(cloud);
+                promise_queue_.pop();
+            }
+            // If no promises are waiting, discard the point cloud
+        }
+    }
+
     void execute(const std::shared_ptr<rclcpp_action::ServerGoalHandle<kinova_action_interfaces::action::VoxelMap>> goal_handle) {
         const auto goal = goal_handle->get_goal();
 
-        // Convert ROS messages to required types
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-        pcl::fromROSMsg(goal->cloud, *cloud);
+        // Create a promise and future to wait for the next point cloud
+        std::promise<std::shared_ptr<pcl::PointCloud<pcl::PointXYZ>>> promise;
+        auto future = promise.get_future();
+        {
+            std::lock_guard<std::mutex> lock(promise_mutex_);
+            promise_queue_.push(std::move(promise));
+        }
+        // Wait for the next point cloud after the request
+        auto cloud = future.get();
+
+        // Convert camera pose
         Eigen::Affine3d affine;
         tf2::fromMsg(goal->camera_pose, affine);
         Eigen::Matrix4d camera_pose = affine.matrix();
@@ -386,12 +423,12 @@ private:
         Eigen::Vector3d bbx_min(goal->bbx_unknown_min.x, goal->bbx_unknown_min.y, goal->bbx_unknown_min.z);
         Eigen::Vector3d bbx_max(goal->bbx_unknown_max.x, goal->bbx_unknown_max.y, goal->bbx_unknown_max.z);
 
-        // Execute the voxel map update
+        // Execute the voxel map update with the received point cloud
         std::vector<Eigen::Vector3d> frontier_voxels, occupied_voxels;
         octomap::ColorOcTree voxel_map = voxel_struct_->update_voxel_map(
             cloud, camera_pose, bbx_min, bbx_max, frontier_voxels, occupied_voxels);
 
-        // Prepare result without bounding box information
+        // Prepare result
         auto result = std::make_shared<kinova_action_interfaces::action::VoxelMap::Result>();
         octomap_msgs::fullMapToMsg(voxel_map, result->octomap);
         for (const auto& v : frontier_voxels) {

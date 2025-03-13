@@ -1,0 +1,7 @@
+collision_object:
+  ros__parameters:
+    cylinder_height: 2.0
+    cylinder_diameter: 0.5
+    box_length: 0.1
+    box_width: 0.1
+    box_height: 0.1

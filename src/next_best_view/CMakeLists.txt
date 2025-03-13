@@ -49,6 +49,7 @@ find_package(octomap_msgs REQUIRED)
 find_package(glog REQUIRED)  # Added for glog
 find_package(OpenMP REQUIRED)  # Added for OpenMP
 find_package(CGAL REQUIRED)  # Added for CGAL
+find_package(rosidl_default_generators REQUIRED)  # Added for service generation
 
 find_package(PCL REQUIRED COMPONENTS common io filters)
 
@@ -67,7 +68,7 @@ add_executable(voxel_map src/voxel_map.cpp)
 add_executable(nextbestview_compute src/nextbestview_compute.cpp)
 add_executable(pose_generator src/pose_generator.cpp)  # New service node
 add_executable(reachability_check src/reachability_check.cpp)  # New service node
-
+add_executable(collision_object src/collision_object.cpp)  # New executable
 
 # Set include directories for each target
 target_include_directories(hello_moveit PUBLIC
@@ -133,6 +134,10 @@ target_include_directories(pose_generator PUBLIC
 target_include_directories(reachability_check PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)  # Include dirs for new service node
+
+target_include_directories(collision_object PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)  # Include dirs for new collision_object executable
 
 # Set compile features and dependencies for each target
 target_compile_features(hello_moveit PUBLIC c_std_99 cxx_std_17)
@@ -339,6 +344,17 @@ ament_target_dependencies(
   "moveit_ros_planning_interface"
 )
 
+target_compile_features(collision_object PUBLIC c_std_99 cxx_std_17)  # New for collision_object
+ament_target_dependencies(
+  collision_object
+  "rclcpp"
+  "moveit_ros_planning_interface"
+  "geometry_msgs"
+  "moveit_msgs"
+  "shape_msgs"
+  "kinova_action_interfaces"
+
+)
 
 # Link libraries for specific targets
 target_link_libraries(voxel_map
@@ -398,7 +414,10 @@ install(TARGETS pose_generator
 install(TARGETS reachability_check
   DESTINATION lib/${PROJECT_NAME})  # New install for service node  
 
-  # Install Python modules
+install(TARGETS collision_object
+  DESTINATION lib/${PROJECT_NAME})  # New install for collision_object
+
+# Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
 # Install Python executables
