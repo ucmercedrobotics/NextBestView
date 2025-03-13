@@ -1,0 +1,10 @@
+# Goal: The target pose for the end effector
+geometry_msgs/Pose target_pose
+
+---
+# Result: Whether the movement was successful
+bool success
+
+---
+# Feedback: Status updates during the action
+string status

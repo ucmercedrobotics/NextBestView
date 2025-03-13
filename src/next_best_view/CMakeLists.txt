@@ -69,6 +69,10 @@ add_executable(nextbestview_compute src/nextbestview_compute.cpp)
 add_executable(pose_generator src/pose_generator.cpp)  # New service node
 add_executable(reachability_check src/reachability_check.cpp)  # New service node
 add_executable(collision_object src/collision_object.cpp)  # New executable
+add_executable(movetopose src/movetopose.cpp)  # New executable
+add_executable(currentpose src/currentpose.cpp)  # New executable
+
+
 
 # Set include directories for each target
 target_include_directories(hello_moveit PUBLIC
@@ -136,6 +140,14 @@ target_include_directories(reachability_check PUBLIC
   $<INSTALL_INTERFACE:include>)  # Include dirs for new service node
 
 target_include_directories(collision_object PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)  # Include dirs for new collision_object executable
+
+target_include_directories(movetopose PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)  # Include dirs for new collision_object executable
+
+target_include_directories(currentpose PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)  # Include dirs for new collision_object executable
 
@@ -356,6 +368,29 @@ ament_target_dependencies(
 
 )
 
+target_compile_features(movetopose PUBLIC c_std_99 cxx_std_17)  # New for collision_object
+ament_target_dependencies(
+  movetopose
+  "rclcpp"
+  "rclcpp_action"
+  "moveit_ros_planning_interface"
+  "geometry_msgs"
+  "moveit_msgs"
+  "kinova_action_interfaces"
+
+)
+
+target_compile_features(currentpose PUBLIC c_std_99 cxx_std_17)  # New for collision_object
+ament_target_dependencies(
+  currentpose
+  "rclcpp"
+  "moveit_ros_planning_interface"
+  "geometry_msgs"
+  "moveit_msgs"
+  "kinova_action_interfaces"
+
+)
+
 # Link libraries for specific targets
 target_link_libraries(voxel_map
   ${OCTOMAP_LIBRARIES}
@@ -415,6 +450,12 @@ install(TARGETS reachability_check
   DESTINATION lib/${PROJECT_NAME})  # New install for service node  
 
 install(TARGETS collision_object
+  DESTINATION lib/${PROJECT_NAME})  # New install for collision_object
+
+install(TARGETS movetopose
+  DESTINATION lib/${PROJECT_NAME})  # New install for collision_object
+
+install(TARGETS currentpose
   DESTINATION lib/${PROJECT_NAME})  # New install for collision_object
 
 # Install Python modules

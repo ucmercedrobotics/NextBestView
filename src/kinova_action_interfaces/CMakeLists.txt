@@ -25,6 +25,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/DetectObject.action"
   "action/MoveTo.action"
+  "action/MoveToPose.action" #simple moveto action
   "action/NextBestView.action"
   "action/FilterPointCloud.action"
   "action/SavePointCloud.action"
@@ -36,6 +37,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/PoseGenerator.srv"
   "srv/ReachabilityCheck.srv"
   "srv/AddCollisionObject.srv"
+  "srv/CurrentPose.srv"
   DEPENDENCIES sensor_msgs geometry_msgs std_msgs octomap_msgs
 )
 
