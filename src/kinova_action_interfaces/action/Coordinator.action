@@ -1,0 +1,14 @@
+# Goal
+geometry_msgs/Point object_position
+string shape_type
+float32 distance
+string algorithm  # "random", "visit_all", "next_best_view"
+int32 num_locations  # Number of locations to visit (used for "random")
+
+---
+# Result
+bool success
+
+---
+# Feedback
+string status

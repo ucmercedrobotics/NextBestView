@@ -71,6 +71,8 @@ add_executable(reachability_check src/reachability_check.cpp)  # New service nod
 add_executable(collision_object src/collision_object.cpp)  # New executable
 add_executable(movetopose src/movetopose.cpp)  # New executable
 add_executable(currentpose src/currentpose.cpp)  # New executable
+add_executable(coordinator src/coordinator.cpp)  # New executable
+
 
 
 
@@ -148,6 +150,10 @@ target_include_directories(movetopose PUBLIC
   $<INSTALL_INTERFACE:include>)  # Include dirs for new collision_object executable
 
 target_include_directories(currentpose PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)  # Include dirs for new collision_object executable
+
+target_include_directories(coordinator PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)  # Include dirs for new collision_object executable
 
@@ -390,7 +396,15 @@ ament_target_dependencies(
   "kinova_action_interfaces"
   "tf2_ros"
   "tf2_geometry_msgs"
+)
 
+target_compile_features(coordinator PUBLIC c_std_99 cxx_std_17)  # New for collision_object
+ament_target_dependencies(
+  coordinator
+  "rclcpp"
+  "rclcpp_action"
+  "geometry_msgs"
+  "kinova_action_interfaces"
 
 )
 
@@ -447,21 +461,24 @@ install(TARGETS nextbestview_compute
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS pose_generator
-  DESTINATION lib/${PROJECT_NAME})  # New install for service node
+  DESTINATION lib/${PROJECT_NAME})  
 
 install(TARGETS reachability_check
-  DESTINATION lib/${PROJECT_NAME})  # New install for service node  
+  DESTINATION lib/${PROJECT_NAME})   
 
 install(TARGETS collision_object
-  DESTINATION lib/${PROJECT_NAME})  # New install for collision_object
+  DESTINATION lib/${PROJECT_NAME})  
 
 install(TARGETS movetopose
-  DESTINATION lib/${PROJECT_NAME})  # New install for collision_object
+  DESTINATION lib/${PROJECT_NAME})  
 
 install(TARGETS currentpose
-  DESTINATION lib/${PROJECT_NAME})  # New install for collision_object
+  DESTINATION lib/${PROJECT_NAME})  
 
-# Install Python modules
+install(TARGETS coordinator
+  DESTINATION lib/${PROJECT_NAME})  
+
+  # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
 # Install Python executables

@@ -23,6 +23,7 @@ endforeach()
 # find_package(<dependency> REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "action/Coordinator.action"
   "action/DetectObject.action"
   "action/MoveTo.action"
   "action/MoveToPose.action" #simple moveto action
