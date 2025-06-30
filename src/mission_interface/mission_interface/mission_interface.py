@@ -16,7 +16,9 @@ from .tasking import (
     GoToPositionLeaf,
     ActionType,
 )
-from kinova_action_interfaces.action import DetectObject, MoveTo
+from kinova_action_interfaces.action import DetectObject, MoveTo, NextBestView
+from geometry_msgs.msg import Point
+from std_msgs.msg import Float32
 
 
 NODE_NAME: str = "kinova_mission_interface"
@@ -61,6 +63,10 @@ class MissionInterface(Node):
             self, MoveTo, "/next_best_view/move_to_action"
         )
 
+        self.nextbestview_client: ActionClient = ActionClient(
+            self, NextBestView, "/next_best_view/next_best_view"
+        )
+
         self.action_callback_map: dict = {
             "identifyObject": self._send_detect_object_goal,
             "nextBestView": self._send_nbv_goal,
@@ -75,6 +81,11 @@ class MissionInterface(Node):
         #         break
 
         # raise SystemExit
+
+        # A member variable to store the last detected object position
+        self.last_detected_object_position: Point = None
+        # A member variable to store the distance
+        self.distance_nbv: Float32 = None
 
     def run(self) -> bool:
         bytes_received, temp_xml_path = self.nic.receive_file()
@@ -138,6 +149,9 @@ class MissionInterface(Node):
         goal.colors = task.colors
         goal.target_view_point_distance = task.object_distance
 
+        # Here we got the object object location
+        self.distance_nbv = goal.target_view_point_distance
+
         self.detect_object_client.wait_for_server()
         self.get_logger().info(
             f"Detect Object Action server available. Sending goal to find {goal.target_class}..."
@@ -167,10 +181,35 @@ class MissionInterface(Node):
             task.set_pose(result.view_position)
             result.success = self._send_kinova_go_to_goal(task)
 
+            # Here we got the object object location
+            self.last_detected_object_position = result.object_position
+
         return result.success
 
-    def _send_nbv_goal(self, task: NextBestViewLeaf):
-        pass
+    def _send_nbv_goal(self, task: NextBestViewLeaf) -> bool:
+        goal: NextBestView.Goal = NextBestView.Goal()
+        goal.location_number = int(task.resolution)
+        goal.distance = self.distance_nbv
+
+        # Use the stored object position
+        if self.last_detected_object_position is not None:
+            goal.object_position = self.last_detected_object_position
+        else:
+            self.get_logger().error("No object position detected yet!")
+            return False
+
+        self.detect_object_client.wait_for_server()
+        self.get_logger().info(
+            f"Next Best View Action server available. Sending NBV task to create {goal.location_number} view pose..."
+        )
+
+        future = self.nextbestview_client.send_goal_async(goal)
+        rclpy.spin_until_future_complete(self, future)
+        result_future = self._goal_response_callback(future)
+        rclpy.spin_until_future_complete(self, result_future)
+        result: NextBestView.Result = self._result_callback(result_future)
+
+        return result.success
 
     def _send_kinova_go_to_goal(self, task: GoToPositionLeaf) -> bool:
         goal: MoveTo.Goal = MoveTo.Goal()

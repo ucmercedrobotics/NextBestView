@@ -24,7 +24,8 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/DetectObject.action"
   "action/MoveTo.action"
-  DEPENDENCIES sensor_msgs geometry_msgs
+  "action/NextBestView.action"
+  DEPENDENCIES sensor_msgs geometry_msgs std_msgs
 )
 
 

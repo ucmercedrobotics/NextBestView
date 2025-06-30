@@ -61,6 +61,13 @@ To start the Docker environment:
 make bash
 ```
 
+If you want to run planning system with the provided actions (identify object, go to position and next best view) run the following command.
+This will launch Rviz2, Moveit2, Vision, action nodes and mission interface. If you intent to use this we are providing example xml file created with Chat GPT.
+After running this command go to section Using with Mission Planning (MP) to understand how to send the generated example plan.
+```bash
+make one4all
+```
+
 Finally, to launch the ROS2 drivers for MoveIt Kortex control:
 ```bash
 make moveit-target
@@ -87,9 +94,13 @@ NOTE: this works only with hardware connected.
 Currently, control with an XML generated mission plan is under implementation.
 XML mission plans are sent via any compliant MP generation tool such as our own [GPT planner](https://github.com/ucmercedrobotics/gpt-mission-planner).
 Connect the planner to TCP port `12345` after initializing all relevant nodes.
+```bash
+nc localhost 12345
+```
+Paste given example plan and Ctrl+c
 
-NOTE: currently there doesn't exist an action/service interface to control the Kinova arm.
-Ultimately, we will implement a node that acts as a server that the `mission_interface` node communicates actions to, along with a launch file.
+### Expected behavior:
 
-Right now you can experiment with the behavior tree mission plan generation with `make mission-interface` and sending a mission plan over port `12345`.
-See an example [here](https://github.com/ucmercedrobotics/gpt-mission-planner/blob/main/app/gpt_outputs/gpt_example.xml)
+    1- Object (pot plant) will be detected.
+    2- Arm will center the object according to camera frame
+    3- Arm will get point cloud information of the plant from different angles and these point clouds will be merged.
