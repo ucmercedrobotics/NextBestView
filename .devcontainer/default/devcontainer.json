@@ -3,7 +3,7 @@
     "privileged": true,
     "remoteUser": "root",
     "build": {
-        "dockerfile": "../Dockerfile",
+        "dockerfile": "../../Dockerfile",
         "args": {
             "USERNAME": "root"
         }
@@ -25,8 +25,7 @@
         "SHELL": "/bin/bash"
     },
     "runArgs": [
-        "--net=nbv",
-        "-p=12345:12345",
+        "--net=host",
         "-v=${localEnv:HOME}/.ssh:/root/.ssh"
     ],
     "mounts": [
