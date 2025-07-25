@@ -22,9 +22,6 @@ ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 # TODO: add CUDA capabilities for when we wish to add GPU queries
 
-# configure DISPLAY env variable for novnc connection
-ENV DISPLAY=novnc:0.0
-
 # set root directory
 WORKDIR /nbv
 
@@ -68,6 +65,13 @@ RUN cd $VISION_WS && git clone https://github.com/Kinovarobotics/ros2_kortex_vis
 COPY . /nbv
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+# noVNC setup
+ENV DISPLAY=:2 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=all \
+  __GLX_VENDOR_LIBRARY_NAME=nvidia \
+  __NV_PRIME_RENDER_OFFLOAD=1
 
 # source packages
 RUN echo "source ${KORTEX_WS}/install/setup.bash" >> /root/.bashrc

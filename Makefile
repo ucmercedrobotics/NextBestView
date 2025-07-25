@@ -1,5 +1,16 @@
 WORKSPACE:= /nbv
 KINOVA_NIC:= en7
+NOVNC:=ghcr.io/ucmercedrobotics/docker-novnc
+
+# GPU detection - check if nvidia-docker or nvidia-container-runtime is available
+GPU_AVAILABLE := $(shell command -v nvidia-docker >/dev/null 2>&1 && echo "true" || (docker info 2>/dev/null | grep -q nvidia && echo "true" || echo "false"))
+
+# GPU flags - only set if GPU is available
+ifeq ($(GPU_AVAILABLE),true)
+    GPU_FLAGS := --gpus=all
+else
+    GPU_FLAGS := 
+endif
 
 repo-init:
 	pre-commit install
@@ -14,21 +25,17 @@ build-image:
 	docker build . -t nbv --target base
 
 vnc:
-	docker run -d --rm \
-	--net=nbv \
-	--env="DISPLAY_WIDTH=1920" \
-	--env="DISPLAY_HEIGHT=1080" \
-	--env="RUN_XTERM=no" \
+	docker run -d --rm --net=host \
 	--name=novnc \
-	-p=8080:8080 \
-	theasp/novnc:latest
+	${NOVNC}
 
 bash:
 	docker run -it --rm \
-	--net=nbv \
+	--net=host \
+	$(GPU_FLAGS) \
 	--privileged \
-	-p=12345:12345 \
 	-v ${CURDIR}:${WORKSPACE}/ \
+	-v ${HOME}/.ssh:/root/.ssh \
 	nbv
 
 nbv:
