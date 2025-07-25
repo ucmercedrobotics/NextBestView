@@ -38,7 +38,6 @@ def launch_setup(context, *args, **kwargs):
     launch_rviz = LaunchConfiguration("launch_rviz")
     use_sim_time = LaunchConfiguration("use_sim_time")
     use_internal_bus_gripper_comm = LaunchConfiguration("use_internal_bus_gripper_comm")
-    
 
     launch_arguments = {
         "robot_ip": robot_ip,
@@ -74,7 +73,6 @@ def launch_setup(context, *args, **kwargs):
     octomap_config = {'octomap_frame': 'base_link', 
                       'octomap_resolution': 0.05,
                       'max_range': 5.0}
-    
 
     move_group_node = Node(
         package="moveit_ros_move_group",
@@ -195,7 +193,6 @@ def launch_setup(context, *args, **kwargs):
         fault_controller_spawner,
         move_group_node,
         static_tf,
-
     ]
 
     return nodes_to_start

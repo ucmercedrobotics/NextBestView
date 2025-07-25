@@ -438,6 +438,7 @@ rclcpp_action::GoalResponse NextBestView::handle_goal(const rclcpp_action::GoalU
 
     std::vector<moveit_msgs::msg::CollisionObject> collision_objects = {
         collision_object, rectangle_collision_object, control_panel_object};
+  
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
     planning_scene_interface.applyCollisionObjects(collision_objects);
 
@@ -750,6 +751,7 @@ std::vector<geometry_msgs::msg::Pose> NextBestView::selectRandomPoses(const std:
 
     std::vector<size_t> indices(poses.size());
     std::iota(indices.begin(), indices.end(), 0);
+
     std::random_device rd;
     std::mt19937 gen(rd());
     std::shuffle(indices.begin(), indices.end(), gen);

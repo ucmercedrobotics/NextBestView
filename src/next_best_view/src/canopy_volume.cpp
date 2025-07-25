@@ -253,6 +253,7 @@ class CanopyVolumeNode : public rclcpp::Node {
     hull.setInputCloud(canopy_cloud);
     pcl::PointCloud<pcl::PointXYZ>::Ptr hull_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     hull.reconstruct(*hull_cloud);
+    
     float area = 0.0;
     for (size_t i = 1; i < hull_cloud->size() - 1; ++i) {
       float x1 = hull_cloud->points[i].x - hull_cloud->points[0].x;

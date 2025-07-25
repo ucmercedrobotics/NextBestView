@@ -50,7 +50,6 @@ find_package(glog REQUIRED)  # Added for glog
 find_package(OpenMP REQUIRED)  # Added for OpenMP
 find_package(CGAL REQUIRED)  # Added for CGAL
 find_package(rosidl_default_generators REQUIRED)  # Added for service generation
-
 find_package(PCL REQUIRED COMPONENTS common io filters)
 
 # Add executables
@@ -72,8 +71,6 @@ add_executable(collision_object src/collision_object.cpp)  # New executable
 add_executable(movetopose src/movetopose.cpp)  # New executable
 add_executable(currentpose src/currentpose.cpp)  # New executable
 add_executable(coordinator src/coordinator.cpp)  # New executable
-
-
 
 
 # Set include directories for each target
@@ -478,7 +475,7 @@ install(TARGETS currentpose
 install(TARGETS coordinator
   DESTINATION lib/${PROJECT_NAME})  
 
-  # Install Python modules
+# Install Python modules
 ament_python_install_package(${PROJECT_NAME})
 
 # Install Python executables
