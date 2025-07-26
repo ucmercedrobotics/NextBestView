@@ -1,0 +1,14 @@
+# Goal
+bool start_filtering
+float64 cylinder_center_x
+float64 cylinder_center_y
+float64 cylinder_center_z
+float64 cylinder_diameter
+float64 cylinder_height
+---
+# Result
+bool success
+int32 num_files_processed
+---
+# Feedback
+string status_message

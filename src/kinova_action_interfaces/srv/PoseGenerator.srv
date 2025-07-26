@@ -1,0 +1,8 @@
+# Request
+geometry_msgs/Point object_position  # 3D position of the object (x, y, z)
+float32 distance                     # Distance from the object to generate poses
+string shape                         # Shape type (e.g., "cylinder", "hemisphere")
+
+---
+# Response
+geometry_msgs/Pose[] candidate_poses  # Array of generated poses (position and orientation)

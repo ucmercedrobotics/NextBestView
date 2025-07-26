@@ -1,0 +1,7 @@
+# Request
+geometry_msgs/Pose[] camera_poses
+
+---
+# Response
+geometry_msgs/Pose[] reachable_camera_poses
+geometry_msgs/Pose[] corresponding_end_effector_poses

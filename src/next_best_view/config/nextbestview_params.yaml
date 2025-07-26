@@ -1,0 +1,23 @@
+nextbestview:
+  ros__parameters:
+      sleep_time: 5
+
+      cylinder_height: 2.0
+      cylinder_total_poses: 180
+      cylinder_z_increments: 10
+      cylinder_diameter: 0.5
+
+      hemisphere_radius: 1.0
+      hemisphere_total_poses: 100
+
+      sphere_radius: 1.0
+      sphere_total_poses: 200
+
+      rectangle_length: 1.0
+      rectangle_width: 1.0
+      rectangle_height: 1.0
+      rectangle_total_poses: 100
+
+      plane_width: 1.0
+      plane_height: 1.0
+      plane_total_poses: 100

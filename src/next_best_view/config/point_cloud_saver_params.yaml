@@ -1,0 +1,6 @@
+point_cloud_saver:
+  ros__parameters:
+    target_frame: "base_link"   # Frame to transform the point cloud to
+    save_retries: 5             # Number of retries for saving the file
+    distance_limit: 3.0    # Example value
+    distance_below: 0.6    # Example value

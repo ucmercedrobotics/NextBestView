@@ -1,0 +1,8 @@
+# Goal
+bool confirm_deletion
+---
+# Result
+bool success
+---
+# Feedback
+string status_message

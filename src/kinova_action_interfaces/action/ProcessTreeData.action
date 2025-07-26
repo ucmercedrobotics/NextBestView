@@ -1,0 +1,8 @@
+# Goal
+bool start_processing
+---
+# Result
+bool success
+---
+# Feedback
+string status_message

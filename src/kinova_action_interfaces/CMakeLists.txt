@@ -11,6 +11,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   sensor_msgs
   geometry_msgs
   std_msgs
+  octomap_msgs
 )
 
 foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
@@ -22,10 +23,23 @@ endforeach()
 # find_package(<dependency> REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "action/Coordinator.action"
   "action/DetectObject.action"
   "action/MoveTo.action"
+  "action/MoveToPose.action" #simple moveto action
   "action/NextBestView.action"
-  DEPENDENCIES sensor_msgs geometry_msgs std_msgs
+  "action/FilterPointCloud.action"
+  "action/SavePointCloud.action"
+  "action/MergePointClouds.action"
+  "action/ClearFiles.action"
+  "action/ProcessTreeData.action"
+  "action/VoxelMap.action"
+  "action/ComputeNextbestview.action"
+  "srv/PoseGenerator.srv"
+  "srv/ReachabilityCheck.srv"
+  "srv/AddCollisionObject.srv"
+  "srv/CurrentPose.srv"
+  DEPENDENCIES sensor_msgs geometry_msgs std_msgs octomap_msgs
 )
 
 

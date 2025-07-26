@@ -1,0 +1,3 @@
+---
+geometry_msgs/PoseStamped end_effector_pose
+geometry_msgs/PoseStamped camera_pose

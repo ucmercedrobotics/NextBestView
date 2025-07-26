@@ -1,10 +1,14 @@
-# Request
-int32 location_number
-geometry_msgs/Point object_position
-float32 distance
+# Goal definition
+string shape_type                # Type of shape for pose generation (e.g., "cylinder", "plane")
+geometry_msgs/Point object_position  # Position of the object in 3D space
+float32 distance                 # Distance from the object for pose generation
+int32 location_number            # Number of locations to visit (used when visit_all is false)
+bool visit_all                   # If true, visit all reachable locations with TSP; if false, visit a random subset
+
 ---
-# Result
-bool success
+# Result definition
+bool success                     # Indicates whether the action completed successfully
+
 ---
-# Feedback
-string processing_status
+# Feedback definition
+string processing_status         # Status messages during execution (e.g., "Generating poses...", "Moving to selected poses...")

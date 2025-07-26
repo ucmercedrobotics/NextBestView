@@ -1,6 +1,7 @@
 WORKSPACE:= /nbv
 KINOVA_NIC:= en7
 NOVNC:=ghcr.io/ucmercedrobotics/docker-novnc
+USE_SIM_TIME:= true
 
 # GPU detection - check if nvidia-docker or nvidia-container-runtime is available
 GPU_AVAILABLE := $(shell command -v nvidia-docker >/dev/null 2>&1 && echo "true" || (docker info 2>/dev/null | grep -q nvidia && echo "true" || echo "false"))
@@ -61,7 +62,8 @@ moveit:
 	use_sim_time:=true \
 	robot_ip:=yyy.yyy.yyy.yyy \
 	use_fake_hardware:=true \
-	vision:=true
+	vision:=true \
+	--debug 
 
 moveit-target:
 	ros2 launch next_best_view moveit.launch.py \
@@ -74,7 +76,7 @@ vision:
 	ros2 launch kinova_vision kinova_vision.launch.py depth_registration:=true
 
 moveit-example:
-	ros2 run next_best_view hello_moveit
+	ros2 run next_best_view hello_moveit 
 
 mission-interface:
 	ros2 run mission_interface mission_interface
@@ -82,8 +84,8 @@ mission-interface:
 detect-object:
 	ros2 run next_best_view object_detection.py
 
-moveto:
-	ros2 launch next_best_view moveto.launch.py
+actions:
+	ros2 launch next_best_view actions.launch.py use_sim_time:=${USE_SIM_TIME}
 
 one4all:
 	ros2 launch next_best_view llm_planning.launch.py

@@ -1,0 +1,4 @@
+canopy_volume:
+  ros__parameters:
+    filter_min_z: 0.1
+    filter_max_z: 0.8

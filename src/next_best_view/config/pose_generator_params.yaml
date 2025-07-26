@@ -1,0 +1,26 @@
+pose_generator:
+  ros__parameters:
+    # Parameters for cylinder shape
+    cylinder_height: 2.0
+    cylinder_total_poses: 180
+    cylinder_z_increments: 10
+    cylinder_diameter: 0.5
+
+    # Parameters for hemisphere shape
+    hemisphere_radius: 1.0
+    hemisphere_total_poses: 100
+
+    # Parameters for sphere shape
+    sphere_radius: 1.0
+    sphere_total_poses: 200
+
+    # Parameters for rectangle shape
+    rectangle_length: 1.0
+    rectangle_width: 1.0
+    rectangle_height: 1.0
+    rectangle_total_poses: 100
+
+    # Parameters for plane shape
+    plane_width: 1.0
+    plane_height: 1.0
+    plane_total_poses: 100
