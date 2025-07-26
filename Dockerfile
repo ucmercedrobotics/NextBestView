@@ -57,6 +57,7 @@ RUN mkdir -p ${VISION_WS}/src
 
 RUN cd $VISION_WS && git clone https://github.com/Kinovarobotics/ros2_kortex_vision.git && \
     . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    rosdep update && \
     rosdep install --from-paths . --ignore-src -r -y && \
     colcon build
 # END vision module end
@@ -64,6 +65,8 @@ RUN cd $VISION_WS && git clone https://github.com/Kinovarobotics/ros2_kortex_vis
 # build local project
 COPY . /nbv
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    rosdep update && \
+    rosdep install --from-paths src --ignore-src -r -y && \
     colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 # noVNC setup

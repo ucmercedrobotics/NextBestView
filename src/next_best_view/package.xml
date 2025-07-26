@@ -31,19 +31,18 @@
   <depend>sensor_msgs</depend>
   <depend>pcl_conversions</depend>
   <depend>pcl_ros</depend>
-  <depend>OpenCV</depend>
   <depend>cv_bridge</depend>
   <depend>message_filters</depend>
   <depend>tf2_ros</depend>
   <depend>tf2_sensor_msgs</depend>
-  <depend>PCL</depend>
   <depend>rcpputils</depend>
-  <depend>octomat_msgs</depend>
+  <depend>octomap_msgs</depend>
   <depend>tf2_eigen</depend>
   <depend>moveit_ros_occupancy_map_monitor</depend>
   <depend>octomap_ros</depend>
   <depend>libpcl-all-dev</depend>
-  <depend>CGAL</depend>
+  <depend>cgal</depend>
+  <depend>libgoogle-glog-dev</depend>
   
 
   <test_depend>ament_lint_auto</test_depend>
