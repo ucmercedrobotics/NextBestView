@@ -16,8 +16,10 @@
 ## How to Start
 Build your container:
 ```bash
-make build-image
+make build-dev
 ```
+(If on ARM hardware, use `make build-prod`).
+
 After, make sure you initialize the repo with the repo pre-commits:
 ```bash
 make repo-init

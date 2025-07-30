@@ -1,3 +1,4 @@
+IMAGE:=ghcr.io/ucmercedrobotics/nextbestview
 WORKSPACE:= /nbv
 KINOVA_NIC:= en7
 NOVNC:=ghcr.io/ucmercedrobotics/docker-novnc
@@ -22,8 +23,17 @@ network:
 config-target-network:
 	sudo ifconfig ${KINOVA_NIC} 192.168.1.11 netmask 255.255.255.0
 
-build-image:
-	docker build . -t nbv --target base
+multiarch-builder:
+	docker buildx create --name multiarch --driver docker-container --use
+
+build-dev:
+	docker build . -t ${IMAGE} --target base
+
+build-prod:
+	docker buildx build --platform linux/arm64/v8 . -t ${IMAGE} --target base
+
+push:
+	docker buildx build --platform linux/arm64/v8,linux/amd64 -t ${IMAGE} --target base . --push
 
 vnc:
 	docker run -d --rm --net=host \
@@ -37,7 +47,11 @@ bash:
 	--privileged \
 	-v ${CURDIR}:${WORKSPACE}/ \
 	-v ${HOME}/.ssh:/root/.ssh \
-	nbv
+	${IMAGE}
+
+shell:
+	CONTAINER_PS=$(shell docker ps -aq --filter ancestor=${IMAGE}) && \
+	docker exec -it $${CONTAINER_PS} bash
 
 nbv:
 	colcon build --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
@@ -45,6 +59,8 @@ nbv:
 clean:
 	rm -rf build/* install/* log/* build/.* install/.* log/.*
 
+# NOTE: NOT WORKING RIGHT NOW BECAUSE OF KINOVA BUG
+# REMOVED PARAM: gripper:=robotiq_2f_85
 gazebo:
 	ros2 launch kortex_bringup kortex_sim_control.launch.py \
 	use_sim_time:=true \
@@ -52,18 +68,17 @@ gazebo:
 	robot_ip:=yyy.yyy.yyy.yyy \
 	use_fake_hardware:=true \
 	dof:=6 \
-	gripper:=robotiq_2f_85 \
 	robot_name:=gen3 \
 	robot_controller:=joint_trajectory_controller \
 	vision:=true
 
+# NOTE: NOT WORKING RIGHT NOW BECAUSE OF KINOVA BUG
 moveit:
-	ros2 launch next_best_view moveit.launch.py \
+	ros2 launch next_best_view moveit.sim.launch.py \
 	use_sim_time:=true \
 	robot_ip:=yyy.yyy.yyy.yyy \
 	use_fake_hardware:=true \
-	vision:=true \
-	--debug 
+	vision:=true 
 
 moveit-target:
 	ros2 launch next_best_view moveit.launch.py \
