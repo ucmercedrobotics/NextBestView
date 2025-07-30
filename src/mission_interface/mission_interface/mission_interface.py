@@ -73,19 +73,22 @@ class MissionInterface(Node):
             "goToPosition": self._send_kinova_go_to_goal,
         }
 
-        # while True:
-        self.nic.init_socket()
-        ret: bool = self.run()
-        self.nic.close_socket()
-        #     if ret is True:
-        #         break
+        while True:
+            self.nic.init_socket()
+            ret: bool = self.run()
+            self.nic.close_socket()
+            if ret is True:
+                self.get_logger().info(
+                    "Mission completed successfully. Restarting TCP socket for next mission..."
+                )
+                # Continue the loop to wait for the next mission
+            else:
+                self.get_logger().error("Mission failed. Restarting...")
 
-        # raise SystemExit
-
-        # A member variable to store the last detected object position
-        self.last_detected_object_position: Point = None
-        # A member variable to store the distance
-        self.distance_nbv: Float32 = None
+            # A member variable to store the last detected object position
+            self.last_detected_object_position: Point = None
+            # A member variable to store the distance
+            self.distance_nbv: Float32 = None
 
     def run(self) -> bool:
         bytes_received, temp_xml_path = self.nic.receive_file()
