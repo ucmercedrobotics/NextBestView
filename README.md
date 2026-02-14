@@ -14,11 +14,7 @@
 <!-- [![arXiv](https://img.shields.io/badge/arXiv-2409.04653-b31b1b.svg)](https://arxiv.org/abs/2409.04653) -->
 
 ## How to Start
-Build your container:
-```bash
-make build-image
-```
-After, make sure you initialize the repo with the repo pre-commits:
+After, build your container:
 ```bash
 make repo-init
 ```
@@ -32,6 +28,18 @@ make network
 Next, standup the VNC container to forward X11 to your web browser. You can see this at `localhost:8080`.
 ```bash
 make vnc
+```
+
+### Development
+If you plan on contributing, make sure you bash into the container and then initialize the git precommit checks:
+To start the Docker environment:
+```bash
+make bash
+```
+
+Once inside, make sure you initialize the repo with the repo pre-commits:
+```bash
+make repo-init
 ```
 
 ### Simulation
@@ -55,6 +63,8 @@ Example:
 ```bash
 make config-target-network KINOVA_NIC=<your_nic_name>
 ```
+
+NOTE: this must be done outside the container to take effect on the host machine.
 
 To start the Docker environment:
 ```bash
